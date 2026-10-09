@@ -15,6 +15,8 @@
 | 11 | Contract code | JSON Schema only, no Pydantic | Keeps one source of truth for contracts. Model store validates against the schemas on load and save | 2026-10-08 |
 | 12 | Zip input | Supported, with zip-slip, symlink and size checks | Reason: developers often share code as a zip, and unpacking untrusted archives is a known attack surface. | 2026-10-08 |
 | 13 | Detection source on model entries | Required `detected_by` field (rule, llm, rule+llm, runtime) plus optional `evidence[].pattern` | The starting-confidence rule needs to know how an entry was found. Lets us compare rule-only, LLM-only and combined detection in the evaluation | 2026-10-09 |
-14	LLM output is a proposal	Accepted only if the cited tool and lines exist in the scan; rejections are counted	Stops hallucinated claims entering the model, and gives a precision metric	2026-10-09
-15	One LLM wrapper with disk cache	All calls go through understand/llm.py; replies cached in .llm_cache/	Provider switch is config, demo runs offline, repeat runs are free	2026-10-09
-16	Keys from .env	A small loader in llm.py, no new dependency; real environment variables win	Keys never enter git; CI and teammates can use real environment variables	2026-10-09
+| 14 | LLM output is a proposal | Accepted only if the cited tool and lines exist in the scan; rejections are counted | Stops hallucinated claims entering the model, and gives a precision metric | 2026-10-09 |
+| 15 | One LLM wrapper with disk cache | All calls go through understand/llm.py; replies cached in .llm_cache/ | Provider switch is config, demo runs offline, repeat runs are free | 2026-10-09 |
+| 16 | Keys from .env | A small loader in llm.py, no new dependency; real environment variables win | Keys never enter git; CI and teammates can use real environment variables | 2026-10-09 |
+| 17 | LLM reply fields are type-checked | Non-text fields and entries that fail the schema are rejected and counted, never raised | A malformed LLM reply must not crash the run; every rejection stays visible in the report | 2026-10-10 |
+| 18 | Model names are config, errors show provider text | Defaults updated to gemini-3.5-flash and openai/gpt-oss-120b; HTTP errors keep the response body | Both original defaults were retired, and a bare 404 hid why | 2026-10-10 |

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from understand import llm
 from understand.confidence import baseline_confidence
-from understand.model_store import validate_entry
+from understand.model_store import ModelError, validate_entry
 
 SYSTEM = (
     "You analyse the source code of a conversational AI agent. "
@@ -53,6 +53,9 @@ def _reject_reason(c, tools):
     missing = [k for k in ("applies_to", "description", "file", "lines") if not c.get(k)]
     if missing:
         return f"missing {', '.join(missing)}"
+    not_text = [k for k in ("applies_to", "description", "file") if not isinstance(c[k], str)]
+    if not_text:
+        return f"not text: {', '.join(not_text)}"
     tool = tools.get(c["applies_to"])
     if tool is None:
         return f"unknown tool {c['applies_to']!r}"
@@ -76,6 +79,8 @@ def apply_inference(store, scan, reply):
 
     caps = {e["name"]: e for e in store.find(type="capability")}
     for name in reply.get("capabilities", []):
+        if not isinstance(name, str):
+            continue
         entry = caps.get(name)
         if entry and entry["detected_by"] == "rule":
             updated = copy.deepcopy(entry)
@@ -105,7 +110,13 @@ def apply_inference(store, scan, reply):
             "detected_by": "llm",
             "related_tools": [c["applies_to"]],
         }
-        store.add(entry)
+        try:
+            store.add(entry)
+        except ModelError as exc:
+            report["constraints_rejected"].append(
+                {"constraint": c, "reason": f"invalid entry: {exc}"}
+            )
+            continue
         cap = caps.get(c["applies_to"])
         if cap:
             current = store.get(cap["id"])

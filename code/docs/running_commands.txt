@@ -1,0 +1,16 @@
+Setup (once, from the code folder)
+1. pip install -r requirements.txt
+2. copy .env.example .env   then fill GEMINI_API_KEY and/or GROQ_API_KEY
+
+Before every commit
+3. ruff check --fix .
+4. pytest -v
+
+Full run on an agent repo
+5. git clone https://github.com/AnshikaaaSh/trip-planner-agent ..\targets\trip-planner-agent
+6. python -m understand.scanner ..\targets\trip-planner-agent --name trip-planner-agent --open
+7. python -m understand.model_store outputs/trip-planner-agent/scan.json --out outputs/trip-planner-agent/model_v0_rule.json
+8. python -m understand.infer outputs/trip-planner-agent/scan.json --repo ..\targets\trip-planner-agent
+
+Outputs land in outputs/trip-planner-agent/:
+scan.json, scan.html, scan.md, model_v0_rule.json (rules only), model_v0.json (rules + LLM)

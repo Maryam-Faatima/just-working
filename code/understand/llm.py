@@ -49,15 +49,17 @@ def _post(url, body, headers):
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        raise LLMError(f"HTTP {exc.code}: {detail}") from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise LLMError(str(exc)) from exc
-
 
 def _gemini(prompt, system):
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise LLMError("GEMINI_API_KEY not set")
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -76,7 +78,7 @@ def _groq(prompt, system):
     key = os.environ.get("GROQ_API_KEY")
     if not key:
         raise LLMError("GROQ_API_KEY not set")
-    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
     messages = ([{"role": "system", "content": system}] if system else []) + [
         {"role": "user", "content": prompt}
     ]

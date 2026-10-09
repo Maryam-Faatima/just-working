@@ -1,6 +1,6 @@
 from understand.confidence import tool_to_capability
 from understand.infer import apply_inference
-from understand.model_store import ModelStore
+from understand.model_store import ModelError, ModelStore
 
 TOOL = {
     "name": "cancel_booking", "docstring": "Cancel a booking.", "file": "agent.py",
@@ -54,3 +54,30 @@ def test_hallucinated_claims_are_rejected_and_counted():
     assert report["constraints_added"] == 0
     assert len(report["constraints_rejected"]) == 5
     assert store.find(type="constraint") == []
+
+def test_non_text_fields_are_rejected_not_raised():
+    store = make_store()
+    reply = {
+        "capabilities": [["cancel_booking"], 5],
+        "constraints": [
+            constraint(description=123),
+            constraint(applies_to=["cancel_booking"]),
+            constraint(file=7),
+        ],
+    }
+    report = apply_inference(store, SCAN, reply)
+    assert report["constraints_added"] == 0
+    assert report["capabilities_agreed"] == 0
+    assert len(report["constraints_rejected"]) == 3
+
+
+def test_entry_that_fails_the_schema_is_rejected_not_raised(monkeypatch):
+    store = make_store()
+
+    def refuse(entry):
+        raise ModelError("schema says no")
+
+    monkeypatch.setattr(store, "add", refuse)
+    report = apply_inference(store, SCAN, {"constraints": [constraint()]})
+    assert report["constraints_added"] == 0
+    assert report["constraints_rejected"][0]["reason"].startswith("invalid entry")

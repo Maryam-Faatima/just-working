@@ -1,3 +1,6 @@
+import io
+import urllib.error
+
 import pytest
 
 from understand import llm
@@ -40,3 +43,12 @@ def test_invalid_json_is_not_cached(monkeypatch, tmp_path):
     with pytest.raises(llm.LLMError):
         llm.complete_json("q")
     assert llm.complete_json("q") == {"ok": True}
+
+def test_http_error_keeps_the_provider_message(monkeypatch):
+    def refuse(req, timeout):
+        body = io.BytesIO(b'{"error": "model not found"}')
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, body)
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)
+    with pytest.raises(llm.LLMError, match="HTTP 404.*model not found"):
+        llm._post("https://example.test", {}, {})

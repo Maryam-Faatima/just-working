@@ -13,8 +13,10 @@ change, and later phases (judge, test generator) reuse the same wrapper.
 - Keys come from environment variables GEMINI_API_KEY and GROQ_API_KEY. For local work they
   are read from a .env file in the project root (copy .env.example). Variables that are
   already set are not overridden, so CI and real environments win over the file.
-- Models default to gemini-2.0-flash and llama-3.3-70b-versatile. Override with GEMINI_MODEL
-  and GROQ_MODEL.
+- Models default to gemini-3.5-flash and openai/gpt-oss-120b. Override with GEMINI_MODEL
+  and GROQ_MODEL. Provider model names are retired regularly (gemini-2.0-flash and
+  llama-3.3-70b-versatile both stopped working in 2026), so a 404 usually means a retired
+  model name. HTTP errors include the provider's response text to make this visible.
 - Every reply is cached in .llm_cache/, keyed by a hash of the system prompt and prompt.
   The same prompt never costs a second call, and the demo can run offline from the cache.
   A reply that is not valid JSON is removed from the cache so it can be retried.
@@ -42,6 +44,10 @@ A constraint is accepted only if its tool exists in the scan, the cited file is 
 file, and the cited lines fall inside the tool's code. Anything else is rejected and counted.
 This stops a hallucinated claim from entering the model with fake evidence. The rejection
 count is a measurable quantity for the evaluation (LLM-only precision compared with rule+llm).
+Rejection also covers malformed replies: a constraint whose applies_to, description or
+file is not text, or whose finished entry fails model_entry.schema.json, is counted in
+constraints_rejected (reason "not text: ..." or "invalid entry: ...") and never raises.
+Non-text capability names are skipped. One bad item cannot stop the rest of the reply.
 
 ## Running it
     python -m understand.scanner <repo or url>

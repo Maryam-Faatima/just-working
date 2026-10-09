@@ -13,11 +13,13 @@
   show the evidence chain, show the crash edge case, show CI green.
 
 ## Status snapshot (update this each session)
-Last updated: 2026-10-09
+Last updated: 2026-10-10
 - Done: schemas + fixtures, acquire, scanner (AST + LangGraph edges), confidence baseline,
-  model_store (build_v0, apply_outcome, discover, save/load), md/console/mermaid/html outputs, CI, 71 tests.
-- Not started: target agent, adapter/personas/traces/checks, LLM inference, call graph,
-  reconcile.py, evidence graph, report, CLI entry point, CD, tag.
+  model_store, md/console/mermaid/html outputs, CI, LLM wrapper (Gemini/Groq, disk cache),
+  LLM inference with evidence check (live run on trip-planner-agent: 3 agreed, 2 constraints
+  added, 0 rejected), 80 tests.
+- Not started: target agent, adapter/personas/traces/checks, call graph, reconcile.py,
+  evidence graph, report, CLI entry point, CD, tag.
 
 ## A. Repo hygiene
 - [x] main protected, develop branch, CI on push/PR (ruff + pytest)
@@ -36,9 +38,9 @@ Last updated: 2026-10-09
 - [x] Repo acquisition (git URL, zip, local path)
 - [x] Scanner: tools, registrations, LangGraph edges
 - [ ] Function-level call graph for direct calls (tests incl. an unresolved call case)
-- [ ] LLM wrapper: one function, Gemini primary, Groq fallback, disk cache
-- [ ] LLM inference producing V0 entries (capabilities, workflows, constraints) with evidence + confidence
-- [ ] Validate LLM output against model_entry schema; reject and retry on invalid
+- [x] LLM wrapper: one function, Gemini primary, Groq fallback, disk cache
+- [x] LLM inference producing V0 entries (capabilities, workflows, constraints) with evidence + confidence
+- [x] Validate LLM output against model_entry schema; reject and retry on invalid
 - [ ] Cached V0 output saved as demo fallback
 - [x] Model store with five statuses and bounded confidence update (unit tested)
 
@@ -85,3 +87,4 @@ Last updated: 2026-10-09
 
 ## Cut line (drop in this order)
 CD, viewer UI, LLM judge, report polish. Never cut the live flip or the evidence chain.
+
