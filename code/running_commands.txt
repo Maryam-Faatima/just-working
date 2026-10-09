@@ -1,0 +1,4 @@
+1. ruff check --fix .     
+2.  pytest -v                                                                                         
+3. Acquire via git: python -m understand.scanner https://github.com/AnshikaaaSh/trip-planner-agent --open
+4. Make the model: python -m understand.model_store outputs/trip-planner-agent/scan.json   
