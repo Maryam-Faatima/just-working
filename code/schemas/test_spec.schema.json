@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestSpec",
+  "type": "object",
+  "required": [
+    "test_id", "target_id", "category", "persona", "goal",
+    "success_criteria", "difficulty", "turn_budget", "modality", "generated_by"
+  ],
+  "properties": {
+    "test_id": { "type": "string" },
+    "target_id": { "type": "string", "description": "Behavioral model entry this test targets" },
+    "target_constraint": { "type": "string" },
+    "category": {
+      "enum": [
+        "functional", "invalid_input", "boundary", "tool_failure", "timeout",
+        "state_violation", "recovery", "adversarial_persona", "context_retention",
+        "distraction", "constraint_probing", "argument_ambiguity", "coverage_gap",
+        "weak_behavior_hardening", "unconfirmed_claim_resolution"
+      ]
+    },
+    "persona": { "type": "string" },
+    "goal": { "type": "string" },
+    "success_criteria": { "type": "string" },
+    "difficulty": { "type": "integer", "minimum": 1, "maximum": 10 },
+    "turn_budget": { "type": "integer", "minimum": 1 },
+    "modality": { "enum": ["text", "voice"] },
+    "generated_by": { "enum": ["seed", "adaptive"] }
+  },
+  "additionalProperties": false
+}

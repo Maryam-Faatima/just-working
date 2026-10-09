@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Finding",
+  "type": "object",
+  "required": [
+    "finding_id", "target_id", "test_id", "trace_id", "result",
+    "severity", "description", "reproducibility"
+  ],
+  "properties": {
+    "finding_id": { "type": "string" },
+    "target_id": { "type": "string" },
+    "test_id": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "result": { "enum": ["pass", "fail"] },
+    "severity": { "enum": ["info", "minor", "major", "critical"] },
+    "description": { "type": "string" },
+    "status_change": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "confidence_change": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "number", "minimum": 0, "maximum": 1 },
+        "to": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "required": ["runs", "failures"],
+      "properties": {
+        "runs": { "type": "integer", "minimum": 1 },
+        "failures": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "additionalProperties": false
+}

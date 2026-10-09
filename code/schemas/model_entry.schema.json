@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BehavioralModelEntry",
+  "type": "object",
+  "required": ["id", "type", "name", "description", "evidence", "confidence", "status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z]+_[0-9]{3}$" },
+    "type": { "enum": ["capability", "workflow", "constraint"] },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {
+          "source": { "enum": ["static", "runtime"] },
+          "file": { "type": "string" },
+          "lines": { "type": "string" },
+          "test_id": { "type": "string" },
+          "trace_id": { "type": "string" }
+        }
+      }
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "status": {
+      "enum": ["unverified", "confirmed", "contradicted", "unreachable", "discovered"]
+    },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "related_tools": { "type": "array", "items": { "type": "string" } },
+    "related_states": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
