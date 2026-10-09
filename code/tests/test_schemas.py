@@ -41,3 +41,17 @@ def test_confidence_out_of_range_is_rejected():
     bad = load("fixtures/model_v0.json")["entries"][0]
     bad["confidence"] = 1.5
     assert not validator.is_valid(bad)
+
+
+def test_missing_detected_by_is_rejected():
+    validator = Draft202012Validator(load("schemas/model_entry.schema.json"))
+    bad = load("fixtures/model_v0.json")["entries"][0]
+    del bad["detected_by"]
+    assert not validator.is_valid(bad)
+
+
+def test_unknown_detected_by_is_rejected():
+    validator = Draft202012Validator(load("schemas/model_entry.schema.json"))
+    bad = load("fixtures/model_v0.json")["entries"][0]
+    bad["detected_by"] = "magic"
+    assert not validator.is_valid(bad)

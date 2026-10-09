@@ -41,6 +41,7 @@ added by us and should be reviewed by the team:
 - test_spec: target_id, modality, generated_by
 - trace: run_status, error
 - finding: severity, reproducibility, status_change, confidence_change
+- model_entry: detected_by (rule, llm, rule+llm, runtime), and evidence[].pattern (optional)
 
 ## Changing a schema (change control)
 

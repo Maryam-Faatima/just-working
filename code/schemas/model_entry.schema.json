@@ -2,11 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BehavioralModelEntry",
   "type": "object",
-  "required": ["id", "type", "name", "description", "evidence", "confidence", "status"],
+  "required": ["id", "type", "name", "description", "evidence", "confidence", "status", "detected_by"],
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z]+_[0-9]{3}$" },
     "type": { "enum": ["capability", "workflow", "constraint"] },
     "name": { "type": "string" },
+    "detected_by": { "enum": ["rule", "llm", "rule+llm", "runtime"] },
     "description": { "type": "string" },
     "evidence": {
       "type": "array",
@@ -19,7 +20,8 @@
           "file": { "type": "string" },
           "lines": { "type": "string" },
           "test_id": { "type": "string" },
-          "trace_id": { "type": "string" }
+          "trace_id": { "type": "string" },
+          "pattern": { "type": "string" }
         }
       }
     },

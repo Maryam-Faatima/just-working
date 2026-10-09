@@ -20,6 +20,8 @@ Decorators (tool, function_tool, tool_plain, kernel_function, register_for_llm),
   registered through dynamic dispatch are not found by the rules.
 - Python only, direct patterns only.
 - Name-based matching can give false positives (for example an unrelated function called from_function).
-- Backstop: Phase 1 LLM inference reads the code as well. Tools found only by the LLM get a lower
-  starting confidence than rule-detected tools (see the detected_by field).
+- Backstop: Phase 1 LLM inference reads the code as well. Each model entry records how it was found in
+  `detected_by` (rule, llm, rule+llm or runtime), and `understand/confidence.py` gives LLM-only entries a lower
+  starting confidence than rule-detected ones. The scanner's own label (for example `decorator:tool`) is kept
+  as `pattern` on the evidence item.
 - Supporting a new style means adding one entry to the sets at the top of scanner.py.

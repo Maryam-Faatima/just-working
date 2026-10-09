@@ -14,4 +14,4 @@
 | 10 | Reproducibility in finding | runs and failures counts | Non-deterministic agents need findings that state how often they occur | 2026-10-06 |
 | 11 | Contract code | JSON Schema only, no Pydantic | Keeps one source of truth for contracts. Model store validates against the schemas on load and save | 2026-10-08 |
 | 12 | Zip input | Supported, with zip-slip, symlink and size checks | Reason: developers often share code as a zip, and unpacking untrusted archives is a known attack surface. | 2026-10-08 |
->>>>>>> develop
+| 13 | Detection source on model entries | Required `detected_by` field (rule, llm, rule+llm, runtime) plus optional `evidence[].pattern` | The starting-confidence rule needs to know how an entry was found. Lets us compare rule-only, LLM-only and combined detection in the evaluation | 2026-10-09 |

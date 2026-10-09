@@ -10,6 +10,7 @@
       "evidence": [{ "source": "static", "file": "booking_agent.py", "lines": "12-31" }],
       "confidence": 0.94,
       "status": "unverified",
+      "detected_by": "rule",
       "constraints": ["must filter by valid date range"],
       "related_tools": ["search_availability"],
       "related_states": ["search_active"]
@@ -19,9 +20,10 @@
       "type": "capability",
       "name": "cancel_booking",
       "description": "Agent can cancel an existing booking",
-      "evidence": [{ "source": "static", "file": "booking_agent.py", "lines": "72-91" }],
+      "evidence": [{ "source": "static", "file": "booking_agent.py", "lines": "72-91", "pattern": "decorator:tool" }],
       "confidence": 0.87,
       "status": "unverified",
+      "detected_by": "rule",
       "constraints": ["must confirm with user before cancelling"],
       "related_tools": ["cancel_booking"],
       "related_states": ["booking_active", "booking_cancelled"]
