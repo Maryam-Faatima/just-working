@@ -23,3 +23,8 @@
 | 19 | LLM sees tools and workflow steps | Prompt includes graph node functions and routers, found with ast | The real business rules in a LangGraph agent live in nodes and routers, not tools | 2026-10-10 |
 | 20 | Constraint must quote one line of code | The quote is checked against the cited lines, and rejected if it is a comment or the docstring | The old check only proved the lines were inside the function, so docstring restatements passed | 2026-10-10 |
 | 21 | Batching, retry, partial failure | Parts sent in batches of about 12000 characters, 2 tries per batch, failed batches reported | Larger repos and flaky providers must not lose the whole run | 2026-10-10 |
+| 22 | A crash never changes the model | Crash or timeout writes a critical finding but leaves status and confidence alone | A crash says nothing about whether the claim holds, and must be visible, not silent | 2026-10-10 |
+| 23 | Unreachable needs repeated attempts | Three completed runs without the tool being called | A single miss is weak evidence for a non-deterministic agent | 2026-10-10 |
+| 24 | One failure contradicts | Any failed check on a completed run sets contradicted; passing runs are applied first | Matches the rubric rule that a test fails if any critical item fails | 2026-10-10 |
+| 25 | Check result contract | {rule_id, passed, severity?, description?}, with passed mandatory | Gives the testing lane a clear output format and prevents silent passes | 2026-10-10 |
+| 26 | One command for the pipeline | pipeline.py runs all stages on one acquired repo; testing and evidence plug in through testing.runner.run(ctx) and evidence.report.build(ctx) | Teammates integrate without editing the pipeline, and the repo stays open for the testing stage | 2026-10-10.
