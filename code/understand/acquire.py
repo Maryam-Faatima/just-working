@@ -1,9 +1,11 @@
 """Repo acquisition: turn a local path or a git URL into a folder we can scan.
 
-Git URLs are cloned (shallow) into a temporary folder that is deleted afterwards.
-The target code is only ever read. It is never imported or executed.
+Git URLs are cloned (shallow). By default the clone goes into a temporary folder that is
+deleted afterwards. With clone_dir the clone is kept in <clone_dir>/<name> and replaced by a
+fresh clone on every run. The target code is only ever read. It is never imported or executed.
 """
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -17,6 +19,8 @@ GIT_URL_PREFIXES = ("https://", "git@", "ssh://")
 CLONE_TIMEOUT_SECONDS = 120
 MAX_ZIP_FILES = 20_000
 MAX_ZIP_BYTES = 500 * 1024 * 1024  # 500 MB unpacked
+DEFAULT_CLONE_DIR = Path(__file__).resolve().parent.parent / "repos"
+
 
 class AcquireError(Exception):
     """Raised when a repo cannot be obtained. The message is safe to show the user."""
@@ -24,6 +28,14 @@ class AcquireError(Exception):
 
 def is_git_url(source):
     return str(source).startswith(GIT_URL_PREFIXES)
+
+
+def check_source(source):
+    """Raise AcquireError early if source is not a git URL, a .zip file or a folder."""
+    path = Path(str(source))
+    if is_git_url(source) or path.is_dir() or (path.is_file() and path.suffix.lower() == ".zip"):
+        return
+    raise AcquireError(f"Not a folder, zip file or git URL: {source}")
 
 
 def clone_repo(url, dest, timeout=CLONE_TIMEOUT_SECONDS):
@@ -59,6 +71,7 @@ def head_commit(path):
         return None
     return proc.stdout.strip() if proc.returncode == 0 else None
 
+
 def extract_zip(zip_path, dest, max_files=MAX_ZIP_FILES, max_bytes=MAX_ZIP_BYTES):
     """Safely unpack zip_path into dest. Nothing is written until every entry passes the checks."""
     dest = Path(dest)
@@ -91,6 +104,7 @@ def _single_root(dest):
         return entries[0]
     return Path(dest)
 
+
 def _on_remove_error(func, path, _exc):
     """Windows keeps .git files read-only. Make them writable and retry."""
     os.chmod(path, stat.S_IWRITE)
@@ -116,13 +130,49 @@ def _workspace(fill):
         _remove_tree(workspace)
 
 
+def _name_from_url(url):
+    return re.split(r"[/:]", str(url).rstrip("/"))[-1].removesuffix(".git") or "repo"
+
+
+def _fresh_clone(url, dest):
+    """Clone url into dest, replacing a clone that is already there.
+
+    The new clone is made next to dest first, so a failed clone (no network, wrong URL)
+    leaves the old one in place.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    staging = dest.with_name(dest.name + ".new")
+    if staging.exists():
+        _remove_tree(staging)
+    try:
+        clone_repo(url, staging)
+        if dest.exists():
+            _remove_tree(dest)
+        staging.rename(dest)
+    except BaseException:
+        if staging.exists():
+            _remove_tree(staging)
+        raise
+
+
 @contextmanager
-def open_source(source):
-    """Yield a folder to scan from a git URL, a .zip file, or a local folder."""
+def open_source(source, clone_dir=None, name=None):
+    """Yield a folder to scan from a git URL, a .zip file, or a local folder.
+
+    A git URL is cloned into a temporary folder that is deleted afterwards, unless clone_dir
+    is given. Then it is cloned fresh into <clone_dir>/<name> and kept, replacing any clone
+    that is already there.
+    """
     path = Path(str(source))
     if is_git_url(source):
-        with _workspace(lambda dest: clone_repo(str(source), dest)) as root:
-            yield root
+        if clone_dir is None:
+            with _workspace(lambda dest: clone_repo(str(source), dest)) as root:
+                yield root
+        else:
+            dest = Path(clone_dir) / (name or _name_from_url(source))
+            _fresh_clone(str(source), dest)
+            yield dest
     elif path.is_file() and path.suffix.lower() == ".zip":
         with _workspace(lambda dest: extract_zip(path, dest)) as root:
             yield root

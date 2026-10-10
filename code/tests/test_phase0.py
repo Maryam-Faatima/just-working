@@ -350,3 +350,62 @@ def test_cli_ask_can_be_cancelled(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", stop)
     assert phase0.main(["ask", "--out", str(tmp_path / "spec.json")]) == 1
     assert not (tmp_path / "spec.json").exists()
+
+def test_questionnaire_asks_again_when_the_purpose_is_too_short():
+    fake_input, _ = scripted(["x", "A booking agent."] + [""] * 30)
+    messages = []
+    spec = phase0.ask(fake_input, messages.append)
+    assert spec["purpose"] == "A booking agent."
+    assert any("at least 5" in m for m in messages)
+
+
+def quiet(*_):
+    return None
+
+
+def test_ensure_spec_asks_and_saves(tmp_path):
+    fake_input, _ = scripted(["A booking agent."] + [""] * 30)
+    path = phase0.ensure_spec(tmp_path / "out" / "agent", input_fn=fake_input, print_fn=quiet)
+    assert path == tmp_path / "out" / "agent" / "spec.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["purpose"] == "A booking agent."
+
+
+@pytest.mark.parametrize("reply", ["y", ""])  # yes, or just Enter: the default is to reuse
+def test_ensure_spec_reuses_saved_answers(tmp_path, reply):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps(FIXTURE), encoding="utf-8")
+    fake_input, prompts = scripted([reply])
+    path = phase0.ensure_spec(folder, input_fn=fake_input, print_fn=quiet)
+    assert path == folder / "spec.json" and len(prompts) == 1
+    assert json.loads(path.read_text(encoding="utf-8")) == FIXTURE  # untouched
+
+
+def test_ensure_spec_asks_again_when_reuse_is_declined(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps(FIXTURE), encoding="utf-8")
+    fake_input, _ = scripted(["n", "A completely new purpose."] + [""] * 30)
+    path = phase0.ensure_spec(folder, input_fn=fake_input, print_fn=quiet)
+    assert json.loads(path.read_text(encoding="utf-8"))["purpose"] == "A completely new purpose."
+
+
+def test_ensure_spec_does_not_trust_unusable_saved_answers(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "spec.json").write_text('{"purpose": ', encoding="utf-8")
+    fake_input, _ = scripted(["A booking agent."] + [""] * 30)
+    messages = []
+    path = phase0.ensure_spec(folder, input_fn=fake_input, print_fn=messages.append)
+    assert any("cannot be used" in m for m in messages)
+    assert json.loads(path.read_text(encoding="utf-8"))["purpose"] == "A booking agent."
+
+
+def test_ensure_spec_force_skips_the_offer(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps(FIXTURE), encoding="utf-8")
+    fake_input, prompts = scripted(["Brand new purpose."] + [""] * 30)
+    path = phase0.ensure_spec(folder, force=True, input_fn=fake_input, print_fn=quiet)
+    assert "What is the agent supposed" in prompts[0]
+    assert json.loads(path.read_text(encoding="utf-8"))["purpose"] == "Brand new purpose."

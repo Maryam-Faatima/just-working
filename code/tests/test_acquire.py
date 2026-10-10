@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from understand import acquire
-from understand.acquire import AcquireError, is_git_url, open_source
+from understand.acquire import AcquireError, check_source, is_git_url, open_source
 from understand.scanner import scan_repo
 
 
@@ -139,3 +139,79 @@ def test_scanning_a_zip_end_to_end(tmp_path):
         result = scan_repo(root)
     assert [t["name"] for t in result["tools"]] == ["cancel_booking"]
     assert result["tools"][0]["file"] == "agent.py"  # no wrapper folder in the evidence path
+
+URL = "https://github.com/user/repo.git"
+
+
+def fake_git():
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[1] == "clone":
+            dest = Path(cmd[-1])
+            dest.mkdir(parents=True)
+            (dest / "agent.py").write_text("x = 1\n", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    return run, calls
+
+
+def clones(calls):
+    return [c for c in calls if c[1] == "clone"]
+
+
+def test_check_source(tmp_path):
+    check_source(tmp_path)
+    check_source(URL)
+    z = tmp_path / "a.zip"
+    z.write_bytes(b"")
+    check_source(z)  # only the file type is checked here
+    with pytest.raises(AcquireError, match="Not a folder"):
+        check_source(tmp_path / "nope")
+
+
+def test_clone_dir_keeps_the_clone(monkeypatch, tmp_path):
+    run, calls = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    with open_source(URL, clone_dir=tmp_path / "repos", name="repo") as root:
+        assert root == tmp_path / "repos" / "repo"
+        assert (root / "agent.py").exists()
+    assert (tmp_path / "repos" / "repo" / "agent.py").exists()  # kept after the run
+    assert len(clones(calls)) == 1
+
+
+def test_clone_name_defaults_to_the_repo_name(monkeypatch, tmp_path):
+    run, _ = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    with open_source(URL, clone_dir=tmp_path / "repos") as root:
+        assert root == tmp_path / "repos" / "repo"
+
+
+def test_existing_clone_is_replaced_by_a_fresh_one(monkeypatch, tmp_path):
+    old = tmp_path / "repos" / "repo"
+    old.mkdir(parents=True)
+    (old / "stale.py").write_text("old", encoding="utf-8")
+    run, calls = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    with open_source(URL, clone_dir=tmp_path / "repos", name="repo") as root:
+        assert (root / "agent.py").exists()
+        assert not (root / "stale.py").exists()
+    assert len(clones(calls)) == 1
+    assert not (tmp_path / "repos" / "repo.new").exists()  # no leftovers
+
+
+def test_failed_clone_keeps_the_old_one(monkeypatch, tmp_path):
+    old = tmp_path / "repos" / "repo"
+    old.mkdir(parents=True)
+    (old / "stale.py").write_text("old", encoding="utf-8")
+
+    def run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 128, "", "fatal: repository not found")
+
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    with pytest.raises(AcquireError, match="repository not found"), open_source(
+            URL, clone_dir=tmp_path / "repos", name="repo"):
+        pass
+    assert (old / "stale.py").exists()
+    assert not (tmp_path / "repos" / "repo.new").exists()

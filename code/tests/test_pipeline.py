@@ -1,11 +1,13 @@
 import json
+import subprocess
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
 import pipeline
-from understand import llm
+from understand import acquire, llm
 from understand.acquire import AcquireError
 from understand.phase0 import SpecError
 
@@ -23,6 +25,12 @@ def delete_thing(thing_id: str) -> str:
     """Delete a thing."""
     return "deleted"
 '''
+
+
+@pytest.fixture(autouse=True)
+def no_terminal(monkeypatch):
+    """Tests never have a person at the keyboard, even under pytest -s."""
+    monkeypatch.setattr(pipeline, "_interactive", lambda: False)
 
 
 @pytest.fixture
@@ -49,7 +57,7 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     for name in ("scan.json", "scan.html", "scan.md", "model_v0_rule.json", "model_v0.json",
                  "callgraph.json", "callgraph.md", "rubric.json", "run_summary.json"):
         assert (folder / name).exists(), name
-    assert not (folder / "spec.json").exists()  # no --spec, so no spec copy
+    assert not (folder / "spec.json").exists()  # no spec, so no spec copy
     assert summary["ok"] is True
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
                                  "infer": "skipped", "test": "skipped", "report": "skipped"}
@@ -134,6 +142,9 @@ def test_bad_source_raises_acquire_error(tmp_path):
     with pytest.raises(AcquireError):
         pipeline.run_pipeline(str(tmp_path / "nope"), out=str(tmp_path))
 
+
+# ---------------------------------------------------------------- Phase 0 in the pipeline
+
 SPEC = {
     "purpose": "Help users find and delete things.",
     "capabilities": ["search_things", "restore_thing"],
@@ -213,3 +224,104 @@ def test_main_accepts_a_spec(repo, tmp_path, spec_file):
     assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", "--spec", str(spec_file)]) == 0
     assert (tmp_path / "o" / "my-agent" / "rubric.json").exists()
 
+
+# ---------------------------------------------------------------- the questionnaire in the pipeline
+
+
+def _no_questions(*args, **kwargs):
+    raise AssertionError("the questionnaire must not run here")
+
+
+def test_terminal_run_starts_with_the_questionnaire(repo, tmp_path, monkeypatch):
+    answers = tmp_path / "answers.json"
+    answers.write_text(json.dumps(SPEC), encoding="utf-8")
+    seen = {}
+
+    def fake_ensure(folder, force=False, **kwargs):
+        seen.update(folder=folder, force=force)
+        return answers
+
+    monkeypatch.setattr(pipeline, "_interactive", lambda: True)
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", fake_ensure)
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm"]) == 0
+    assert seen == {"folder": tmp_path / "o" / "my-agent", "force": False}
+    rubric = json.loads((tmp_path / "o" / "my-agent" / "rubric.json").read_text(encoding="utf-8"))
+    assert "R1" in [i["rule_id"] for i in rubric["items"]]
+
+
+def test_ask_flag_forces_the_questionnaire_without_a_terminal(repo, tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_ensure(folder, force=False, **kwargs):
+        seen["force"] = force
+        path = tmp_path / "answers.json"
+        path.write_text(json.dumps(SPEC), encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", fake_ensure)
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", "--ask"]) == 0
+    assert seen == {"force": True}
+
+
+@pytest.mark.parametrize("extra, terminal", [(["--no-ask"], True), ([], False)])
+def test_no_questions_with_no_ask_or_without_a_terminal(repo, tmp_path, monkeypatch, extra, terminal):
+    monkeypatch.setattr(pipeline, "_interactive", lambda: terminal)
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", _no_questions)
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", *extra]) == 0
+
+
+def test_explicit_spec_skips_the_questionnaire(repo, tmp_path, spec_file, monkeypatch):
+    monkeypatch.setattr(pipeline, "_interactive", lambda: True)
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", _no_questions)
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", "--spec", str(spec_file)]) == 0
+
+
+def test_bad_path_fails_before_any_question(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "_interactive", lambda: True)
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", _no_questions)
+    assert pipeline.main([str(tmp_path / "nope"), "--out", str(tmp_path / "o")]) == 2
+
+
+def test_cancelling_the_questionnaire_exits_cleanly(repo, tmp_path, monkeypatch):
+    def cancel(folder, force=False, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(pipeline, "_interactive", lambda: True)
+    monkeypatch.setattr(pipeline.phase0, "ensure_spec", cancel)
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm"]) == 1
+    assert not (tmp_path / "o").exists()
+
+
+# ---------------------------------------------------------------- cloning a git URL
+
+
+def fake_git_clone():
+    calls = []
+
+    def run_git(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[1] == "clone":
+            dest = Path(cmd[-1])
+            dest.mkdir(parents=True)
+            (dest / "agent.py").write_text(AGENT, encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "abc123\n", "")
+
+    return run_git, calls
+
+
+def test_git_url_is_cloned_into_repos_and_replaced_on_every_run(tmp_path, monkeypatch):
+    run_git, calls = fake_git_clone()
+    monkeypatch.setattr(acquire.subprocess, "run", run_git)
+    url = "https://github.com/user/repo.git"
+    first_lines, second_lines = [], []
+    first = pipeline.run_pipeline(url, out=str(tmp_path / "out"), repos=str(tmp_path / "repos"),
+                                  use_llm=False, log=first_lines.append)
+    assert (tmp_path / "repos" / "repo" / "agent.py").exists()  # kept after the run
+    assert (tmp_path / "out" / "repo" / "model_v0.json").exists()
+    assert any("Cloning" in line for line in first_lines)
+    second = pipeline.run_pipeline(url, out=str(tmp_path / "out"), repos=str(tmp_path / "repos"),
+                                   use_llm=False, log=second_lines.append)
+    assert any("Replacing" in line for line in second_lines)
+    assert len([c for c in calls if c[1] == "clone"]) == 2  # cloned again, not reused
+    assert statuses(first)["scan"] == "ok" and statuses(second)["scan"] == "ok"

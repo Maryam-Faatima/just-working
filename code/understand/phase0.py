@@ -12,7 +12,8 @@ used in three places:
 3. Test generation hints (weak spots, difficult user types, external services, run config),
    read from ctx["spec"] by the testing lane.
 
-Commands:
+Normally the pipeline asks the questionnaire itself (python -m pipeline <repo>, see
+ensure_spec). The pieces are also available on their own:
     python -m understand.phase0 ask --out spec.json        answer the questionnaire
     python -m understand.phase0 template                   print an example spec
     python -m understand.phase0 check spec.json [--scan scan.json]   validate, and compare with a scan
@@ -271,12 +272,15 @@ def ask(input_fn=None, print_fn=print):
     """Run the short questionnaire (phase0_questions.md, version 2). Returns a raw spec dict."""
     input_fn = input_fn or input
 
-    def text(prompt, required=False):
+    def text(prompt, required=False, min_len=1):
         while True:
             answer = input_fn(f"{prompt}\n> ").strip()
-            if answer or not required:
+            if not answer and not required:
                 return answer
-            print_fn("An answer is required here.")
+            if answer and len(answer) >= min_len:
+                return answer
+            print_fn("An answer is required here." if not answer
+                     else f"Please write at least {min_len} characters.")
 
     def lines(prompt):
         print_fn(f"{prompt} (one per line, empty line to finish)")
@@ -328,7 +332,7 @@ def ask(input_fn=None, print_fn=print):
     print_fn("GreatTest Phase 0: a few questions about what your code does not say.")
     print_fn("Use tool or function names from the code wherever you know them.\n")
     spec = {"purpose": text("1. What is the agent supposed to achieve for its users, in a sentence or two?",
-                            required=True)}
+                            required=True, min_len=5)}
     spec["out_of_scope"] = lines("2. What should it refuse or stay out of, even if a user asks?")
     spec["failure_definition"] = text("3. What would make you call a conversation a failure? (empty to skip)")
     spec["capabilities"] = lines("Anything the agent must be able to do that the code may not show?")
@@ -336,7 +340,7 @@ def ask(input_fn=None, print_fn=print):
     print_fn("\n4-6. Rules the code does not enforce. Add one rule at a time.")
     rules = []
     while True:
-        rule_text = text("Rule, for example 'Must confirm before cancelling' (empty to finish)")
+        rule_text = text("Rule, for example 'Must confirm before cancelling' (empty to finish)", min_len=5)
         if not rule_text:
             break
         rules.append(_drop_empty({
@@ -381,6 +385,44 @@ def ask(input_fn=None, print_fn=print):
         "repeats": number("Repeated runs to check reproducibility", int, 1, 20, 3),
     })
     return _drop_empty(spec)
+
+
+def _confirm(input_fn, print_fn, prompt, default=True):
+    hint = "Y/n" if default else "y/N"
+    while True:
+        answer = input_fn(f"{prompt} ({hint})\n> ").strip().lower()
+        if not answer:
+            return default
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print_fn("Please answer y or n.")
+
+
+def ensure_spec(folder, force=False, input_fn=None, print_fn=print):
+    """The spec for one agent, stored as <folder>/spec.json. Returns that path.
+
+    Answers saved by an earlier run are offered for reuse (unless force is set), so the
+    questionnaire is answered once per agent. Otherwise it is asked and the answers are saved.
+    """
+    input_fn = input_fn or input
+    path = Path(folder) / "spec.json"
+    if path.exists() and not force:
+        try:
+            saved = load_spec(path)
+        except SpecError as exc:
+            print_fn(f"The saved answers in {path} cannot be used ({exc}). Please answer again.\n")
+        else:
+            print_fn(f"Found the Phase 0 answers from an earlier run ({len(saved['rules'])} rules): {path}")
+            if _confirm(input_fn, print_fn, "Reuse them? Answer n to start the questionnaire again"):
+                return path
+            print_fn("")
+    spec = normalize_spec(ask(input_fn, print_fn))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
+    print_fn(f"\nSaved your answers to {path}. The next run offers to reuse them.\n")
+    return path
 
 
 # ---------------------------------------------------------------- command line

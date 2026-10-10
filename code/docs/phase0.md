@@ -11,15 +11,26 @@ Only the developer can say which rules matter, what counts as a failure, and whi
 services are unsafe to call during testing.
 
 ## Using it
+The normal way is to run the pipeline in a terminal. It starts with the questionnaire:
+
+    python -m pipeline <git URL | folder>
+
+The answers are saved in outputs/<agent>/spec.json. The next run for the same agent shows how many
+rules were saved and asks "Reuse them?" (Enter reuses). Answer n, or pass --ask, to answer again.
+The saved file is plain JSON and can be edited by hand. --spec FILE uses another file, --no-ask never asks.
+
+The same pieces are also available on their own:
+
     python -m understand.phase0 ask --out spec.json     answer the questionnaire (16 questions)
     python -m understand.phase0 template                print an example spec to edit by hand
     python -m understand.phase0 check spec.json --scan outputs/<agent>/scan.json
-    python pipeline.py <agent repo> --spec spec.json
 
 `ask` is version 2 of phase0_questions.md (only what the code does not already say), with
 conditional skipping: the questions about a service are asked only for services the developer names.
+Answers that the schema would reject (a purpose or a rule shorter than 5 characters) are asked again
+on the spot, so a long session is never lost at the end.
 `check` validates a spec, and with --scan lists rules that name tools the code does not have.
-Without --spec the pipeline still runs: the spec stage is skipped and the rubric holds only the defaults.
+Without a spec the pipeline still runs: the spec stage is skipped and the rubric holds only the defaults.
 
 ## The spec (schemas/requirements_spec.schema.json)
 Only `purpose` is required. Every other field is optional.

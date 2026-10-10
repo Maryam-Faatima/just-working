@@ -24,3 +24,14 @@ scan.json, scan.html, scan.md, model_v0_rule.json (rules only), model_v0.json (r
 2. pytest -v
 3. python -m understand.phase0 ask --out spec.json
 4.python pipeline.py https://github.com/AnshikaaaSh/trip-planner-agent  
+
+########RUN  COMMANDS#####
+Run everything (asks the Phase 0 questions first, clones a URL if needed)
+python -m pipeline https://github.com/AnshikaaaSh/trip-planner-agent
+python -m pipeline D:\agents\my_agent
+
+Useful options
+--ask        answer the questionnaire again
+--no-ask     never ask (scripts, CI)
+--spec FILE  use a spec file instead of asking
+--no-llm     skip the LLM step
