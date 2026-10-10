@@ -7,6 +7,7 @@ import pytest
 import pipeline
 from understand import llm
 from understand.acquire import AcquireError
+from understand.phase0 import SpecError
 
 AGENT = '''from langchain_core.tools import tool
 
@@ -45,13 +46,14 @@ def statuses(summary):
 def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     summary, lines = run(repo, tmp_path, use_llm=False)
     folder = tmp_path / "out" / "my-agent"
-    for name in ("scan.json", "scan.html", "scan.md", "model_v0_rule.json",
-                 "model_v0.json", "callgraph.json", "callgraph.md", "run_summary.json"):
+    for name in ("scan.json", "scan.html", "scan.md", "model_v0_rule.json", "model_v0.json",
+                 "callgraph.json", "callgraph.md", "rubric.json", "run_summary.json"):
         assert (folder / name).exists(), name
+    assert not (folder / "spec.json").exists()  # no --spec, so no spec copy
     assert summary["ok"] is True
-    assert statuses(summary) == {"scan": "ok", "callgraph": "ok", "model": "ok",
+    assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
                                  "infer": "skipped", "test": "skipped", "report": "skipped"}
-    assert len(lines) == 6
+    assert len(lines) == 7
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
     assert {e["name"] for e in model["entries"]} == {"search_things", "delete_thing"}
 
@@ -117,7 +119,7 @@ def test_required_stage_failure_stops_the_run(repo, tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline, "scan_repo", broken)
     summary, _ = run(repo, tmp_path, use_llm=False)
-    assert [s["stage"] for s in summary["stages"]] == ["scan"]
+    assert [s["stage"] for s in summary["stages"]] == ["spec", "scan"]
     assert summary["ok"] is False
     assert (tmp_path / "out" / "my-agent" / "run_summary.json").exists()
 
@@ -131,3 +133,83 @@ def test_main_exit_codes(repo, tmp_path, capsys):
 def test_bad_source_raises_acquire_error(tmp_path):
     with pytest.raises(AcquireError):
         pipeline.run_pipeline(str(tmp_path / "nope"), out=str(tmp_path))
+
+SPEC = {
+    "purpose": "Help users find and delete things.",
+    "capabilities": ["search_things", "restore_thing"],
+    "rules": [
+        {"text": "Must ask the user to confirm before deleting", "kind": "must_always",
+         "severity": "critical", "applies_to": ["delete_thing"], "check": "deterministic"},
+        {"text": "Never delete something the user did not name", "kind": "must_never",
+         "severity": "major", "applies_to": ["delet_thing"]},
+    ],
+    "out_of_scope": ["Anything unrelated to things"],
+    "ambiguity_policy": "ask",
+}
+
+
+@pytest.fixture
+def spec_file(tmp_path):
+    path = tmp_path / "spec.json"
+    path.write_text(json.dumps(SPEC), encoding="utf-8")
+    return path
+
+
+def test_spec_adds_developer_constraints_and_a_rubric(repo, tmp_path, spec_file):
+    summary, _ = run(repo, tmp_path, use_llm=False, spec_path=spec_file)
+    folder = tmp_path / "out" / "my-agent"
+    assert statuses(summary)["spec"] == "ok" and summary["ok"] is True
+    model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
+    developer = [e for e in model["entries"] if e["detected_by"] == "developer"]
+    assert {e["type"] for e in developer} == {"constraint", "capability"}
+    delete_rule = next(e for e in developer if e["description"].startswith("Must ask"))
+    assert delete_rule["related_tools"] == ["delete_thing"] and delete_rule["status"] == "unverified"
+    rubric = json.loads((folder / "rubric.json").read_text(encoding="utf-8"))
+    assert [i["rule_id"] for i in rubric["items"]] == ["U1", "R1", "R2", "U2", "U3"]
+    assert next(i for i in rubric["items"] if i["rule_id"] == "R1")["target_id"] == delete_rule["id"]
+    assert json.loads((folder / "spec.json").read_text(encoding="utf-8"))["rules"][0]["id"] == "R1"
+
+
+def test_rule_only_model_stays_free_of_developer_entries(repo, tmp_path, spec_file):
+    run(repo, tmp_path, use_llm=False, spec_path=spec_file)
+    rule_only = (tmp_path / "out" / "my-agent" / "model_v0_rule.json").read_text(encoding="utf-8")
+    assert "developer" not in rule_only
+
+
+def test_spec_problems_are_warnings_in_the_summary(repo, tmp_path, spec_file):
+    summary, _ = run(repo, tmp_path, use_llm=False, spec_path=spec_file)
+    assert statuses(summary)["model"] == "warning" and summary["ok"] is True
+    assert len(summary["spec_warnings"]) == 2  # restore_thing is not a tool, delet_thing is a typo
+    assert any("delet_thing" in w for w in summary["spec_warnings"])
+    assert summary["spec"] == str(spec_file)
+
+
+def test_hooks_receive_the_spec_and_the_rubric(repo, tmp_path, spec_file, monkeypatch):
+    seen = {}
+    fake = types.ModuleType("testing.runner")
+
+    def hook(ctx):
+        seen["rules"] = len(ctx["spec"]["rules"])
+        seen["items"] = len(ctx["rubric"]["items"])
+
+    fake.run = hook
+    monkeypatch.setitem(sys.modules, "testing.runner", fake)
+    run(repo, tmp_path, use_llm=False, spec_path=spec_file)
+    assert seen == {"rules": 2, "items": 5}
+
+
+def test_invalid_spec_stops_before_any_work(repo, tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"purpose": "Help users.", "rules": [{"text": "Must confirm", "kind": "x"}]}),
+                   encoding="utf-8")
+    with pytest.raises(SpecError):
+        run(repo, tmp_path, use_llm=False, spec_path=bad)
+    assert not (tmp_path / "out").exists()
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", "--spec", str(bad)]) == 2
+    assert not (tmp_path / "o").exists()
+
+
+def test_main_accepts_a_spec(repo, tmp_path, spec_file):
+    assert pipeline.main([str(repo), "--out", str(tmp_path / "o"), "--no-llm", "--spec", str(spec_file)]) == 0
+    assert (tmp_path / "o" / "my-agent" / "rubric.json").exists()
+

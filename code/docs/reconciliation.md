@@ -40,8 +40,7 @@ Built to finding.schema.json and validated before it is returned.
   reported separately, so a crash cannot pass silently or hang the demo.
 - "Unreachable" needs repeated attempts, because one run that missed the tool proves little
   for a non-deterministic agent.
-- The entry updated is the one named by spec["target_id"], the capability. The rubric says
-  a failed linked check flips that entry (R1 flips cancel_booking).
+- The entry updated is the one named by spec["target_id"]. For a developer rule that is the constraint entry (con_xxx), so a failed check marks the constraint contradicted and leaves the capability it concerns untouched (working document, Section 5). Rubric item ids are the check rule_ids (docs/phase0.md).
 
 ## Running one test by hand (demo and debugging)
     python -m understand.reconcile model_v0.json spec.json trace.json checks.json --finding-out finding.json
@@ -49,7 +48,6 @@ This updates model_v0.json in place (version set to v1) and prints the finding.
 
 ## Known limitations (stated openly)
 - Reconciliation trusts the check results it is given. It does not judge conversations itself.
-- Only the targeted entry is updated. A failed constraint check updates the capability, not
-  a separate constraint entry. See the open decision in decisions.md.
+- Only the targeted entry is updated. Constraints the LLM found in the code are also entries, so a test for one of them should target its own entry, not the capability.
 - One test spec is reconciled at a time. Choosing what to test next is a separate step.
 - Confidence steps use the fixed rates in confidence.py. They are not yet tuned on data.

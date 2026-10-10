@@ -8,10 +8,7 @@
 - Statuses: unverified, confirmed, contradicted, unreachable, discovered.
 - Rules for helpers: no em dashes in prose, small PRs, every change needs a unit test,
   never commit .env, run `ruff check --fix .` then `pytest -v` before every commit.
-- Demo story: build V0 from a booking agent repo, run an adversarial persona test,
-  cancel_booking flips unverified to contradicted (confidence drops by the bounded rule),
-  show the evidence chain, show the crash edge case, show CI green.
-
+- Demo story: build V0 from a booking agent repo and a Phase 0 spec, run an adversarial persona test, the constraint "must confirm before cancelling" flips unverified to contradicted (confidence drops by the bounded rule) while cancel_booking keeps its status, show the evidence chain, show the crash edge case, show CI green.
 ## Status snapshot (update this each session)
 Last updated: 2026-10-10
 - Done: schemas + fixtures, acquire, scanner, call graph + component interactions, confidence

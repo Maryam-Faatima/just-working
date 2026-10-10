@@ -14,3 +14,13 @@ Full run on an agent repo
 
 Outputs land in outputs/trip-planner-agent/:
 scan.json, scan.html, scan.md, model_v0_rule.json (rules only), model_v0.json (rules + LLM)
+
+
+
+
+
+########UPDATED#######
+1. ruff check --fix .
+2. pytest -v
+3. python -m understand.phase0 ask --out spec.json
+4.python pipeline.py https://github.com/AnshikaaaSh/trip-planner-agent  

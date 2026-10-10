@@ -12,6 +12,8 @@ every fixture validates, so CI fails if a contract is broken.
 | Test spec | schemas/test_spec.schema.json | Test generator | Testing engine |
 | Trace | schemas/trace.schema.json | Testing engine | Reconciliation, evidence graph |
 | Finding | schemas/finding.schema.json | Judge and reconciliation | Evidence graph, report |
+| Requirements spec | schemas/requirements_spec.schema.json | Phase 0 (developer questionnaire) | Model merge, rubric, test generator |
+| Rubric | schemas/rubric.schema.json | Phase 0 | Testing lane (check rule_id), judge, reconciliation |
 
 ## Data flow
 
@@ -42,6 +44,8 @@ added by us and should be reviewed by the team:
 - trace: run_status, error
 - finding: severity, reproducibility, status_change, confidence_change
 - model_entry: detected_by (rule, llm, rule+llm, runtime), and evidence[].pattern (optional)
+- requirements_spec and rubric: new contracts for Phase 0 (see docs/phase0.md)
+- model_entry: detected_by and evidence[].source also accept "developer", for claims that come from the developer's answers and have no source line
 
 ## Changing a schema (change control)
 

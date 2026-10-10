@@ -29,6 +29,10 @@ def test_name_based_constructor_is_weaker_than_decorator():
         "rule", "decorator:tool"
     )
 
+def test_developer_statement_sits_between_llm_only_and_rule_detection():
+    developer = baseline_confidence("developer")
+    assert baseline_confidence("llm") < developer < baseline_confidence("rule", "decorator:tool")
+    assert developer < baseline_confidence("rule")  # also below a name-based rule match
 
 def test_unknown_source_is_rejected():
     with pytest.raises(ValueError):

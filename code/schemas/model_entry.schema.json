@@ -7,7 +7,7 @@
     "id": { "type": "string", "pattern": "^[a-z]+_[0-9]{3}$" },
     "type": { "enum": ["capability", "workflow", "constraint"] },
     "name": { "type": "string" },
-    "detected_by": { "enum": ["rule", "llm", "rule+llm", "runtime"] },
+    "detected_by": { "enum": ["rule", "llm", "rule+llm", "runtime", "developer"] },
     "description": { "type": "string" },
     "evidence": {
       "type": "array",
@@ -16,7 +16,7 @@
         "type": "object",
         "required": ["source"],
         "properties": {
-          "source": { "enum": ["static", "runtime"] },
+          "source": { "enum": ["static", "runtime", "developer"] },
           "file": { "type": "string" },
           "lines": { "type": "string" },
           "test_id": { "type": "string" },

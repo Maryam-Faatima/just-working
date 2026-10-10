@@ -4,6 +4,7 @@ RULE_BASE = {"decorator": 0.90, "class": 0.90, "schema": 0.85, "constructor": 0.
 RULE_DEFAULT = 0.75
 LLM_ONLY = 0.55
 RUNTIME_DISCOVERED = 0.70
+DEVELOPER_STATED = 0.60
 AGREEMENT_BONUS = 0.05
 MAX_BASELINE = 0.97
 
@@ -14,6 +15,8 @@ def baseline_confidence(detected_by, pattern=None):
         return LLM_ONLY
     if detected_by == "runtime":
         return RUNTIME_DISCOVERED
+    if detected_by == "developer":
+        return DEVELOPER_STATED
     if detected_by not in ("rule", "rule+llm"):
         raise ValueError(f"unknown detected_by: {detected_by!r}")
     base = RULE_BASE.get((pattern or "").split(":")[0], RULE_DEFAULT)

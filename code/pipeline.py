@@ -1,14 +1,16 @@
 """One command for the whole pipeline.
 
-    python pipeline.py <git URL | .zip file | folder> [--name N] [--out DIR] [--no-llm] [--open]
+    python pipeline.py <git URL | .zip file | folder> [--spec FILE] [--name N] [--out DIR] [--no-llm] [--open]
 
 The target repo is acquired once and kept open while every stage runs, so later stages
 (for example the testing engine) can start the agent from its real folder.
 
 Stages run in order and share one context dict:
+  spec       Phase 0: load the developer requirements spec (--spec). Skipped without one
   scan       acquire the repo, parse it (framework-aware AST), write scan.json / scan.html / scan.md
   callgraph  build the call graph and the component interactions, write callgraph.json / .md
-  model      build the rule-based Behavioral Model V0 (model_v0_rule.json and model_v0.json)
+  model      build the rule-based Behavioral Model V0 (model_v0_rule.json), add the developer's rules
+             from the spec, write rubric.json (and spec.json) and model_v0.json
   infer      ask the LLM to cross-check V0 and add constraints (overwrites model_v0.json)
   test       OPTIONAL hook: testing.runner.run(ctx), the testing lane plugs in here
   report     OPTIONAL hook: evidence.report.build(ctx), the evidence lane plugs in here
@@ -17,9 +19,10 @@ A hook is a function that takes ctx and returns a short text (or None). Until th
 exists the stage is reported as "skipped". If a hook exists and raises, the stage is
 reported as "failed" and the run continues with the next stage.
 
-ctx keys: source, name, use_llm, repo_root, folder, scan, callgraph, store.
+ctx keys: source, name, use_llm, repo_root, folder, scan, callgraph, store,
+spec (None without --spec), rubric, spec_report.
 Everything is summarised in <output folder>/run_summary.json.
-Exit code: 0 all stages ok or skipped, 1 a stage failed, 2 the source could not be opened.
+Exit code: 0 all stages ok or skipped, 1 a stage failed, 2 the source or the spec could not be used.
 """
 import argparse
 import importlib
@@ -29,13 +32,21 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from understand import callgraph, infer, llm
+from understand import callgraph, infer, llm, phase0
 from understand.acquire import AcquireError, head_commit, open_source
 from understand.model_store import build_v0
 from understand.outputs import DEFAULT_OUTPUT_DIR, agent_name, write_scan_outputs
 from understand.scanner import scan_repo
 
 REQUIRED_STAGES = {"scan", "model"}  # nothing useful can run after these fail
+
+
+def stage_spec(ctx):
+    spec = ctx.get("spec")
+    if spec is None:
+        return "skipped", "no --spec: the model is built from code only, rubric has the defaults"
+    return "ok", (f"{len(spec['rules'])} rules, {len(spec.get('capabilities', []))} capabilities, "
+                  f"{len(spec.get('external_services', []))} external services")
 
 
 def stage_scan(ctx):
@@ -67,12 +78,23 @@ def stage_callgraph(ctx):
 
 def stage_model(ctx):
     store = build_v0(ctx["scan"])
-    store.save(ctx["folder"] / "model_v0_rule.json")
+    store.save(ctx["folder"] / "model_v0_rule.json")  # code only, kept for the rule-only comparison
+    detail = (f"{len(store.find(type='capability'))} capabilities, "
+              f"{len(store.find(type='workflow'))} workflow steps from the code")
+    status, spec = "ok", ctx.get("spec")
+    report = {"rule_entries": {}, "warnings": []}
+    if spec:
+        report = phase0.merge_into_model(store, spec)
+        detail += (f"; spec added {report['constraints_added']} constraints "
+                   f"and {report['capabilities_added']} capabilities")
+        if report["warnings"]:
+            status = "warning"
+            detail += f", {len(report['warnings'])} spec warnings (see run_summary.json)"
+    rubric = phase0.build_rubric(spec, report["rule_entries"], agent=ctx["name"])
+    phase0.write_outputs(ctx["folder"], rubric, spec)
     store.save(ctx["folder"] / "model_v0.json")  # downstream stages always read this one
-    ctx["store"] = store
-    caps = len(store.find(type="capability"))
-    flows = len(store.find(type="workflow"))
-    return "ok", f"{caps} capabilities, {flows} workflow steps (rules only)"
+    ctx.update(store=store, rubric=rubric, spec_report=report)
+    return status, f"{detail}; rubric has {len(rubric['items'])} items"
 
 
 def stage_infer(ctx):
@@ -108,6 +130,7 @@ def optional_stage(module, function):
 
 
 STAGES = [
+    ("spec", stage_spec),
     ("scan", stage_scan),
     ("callgraph", stage_callgraph),
     ("model", stage_model),
@@ -117,13 +140,15 @@ STAGES = [
 ]
 
 
-def run_pipeline(source, name=None, out=None, use_llm=True, log=print):
+def run_pipeline(source, name=None, out=None, use_llm=True, log=print, spec_path=None):
     """Run every stage on `source`. Returns the summary dict (also written to disk).
 
-    Raises AcquireError if the source cannot be opened.
+    Raises AcquireError if the source cannot be opened and SpecError if the spec cannot be
+    used. The spec is checked first, so a typo in it costs nothing.
     """
     name = name or agent_name(source)
-    ctx = {"source": str(source), "name": name, "out": out, "use_llm": use_llm}
+    spec = phase0.load_spec(spec_path) if spec_path else None
+    ctx = {"source": str(source), "name": name, "out": out, "use_llm": use_llm, "spec": spec}
     started = datetime.now(UTC)
     results = []
     with open_source(source) as repo_root:
@@ -147,6 +172,8 @@ def run_pipeline(source, name=None, out=None, use_llm=True, log=print):
         "source": ctx["source"],
         "commit": (ctx.get("scan") or {}).get("commit"),
         "started_at": started.isoformat(timespec="seconds"),
+        "spec": str(spec_path) if spec_path else None,
+        "spec_warnings": (ctx.get("spec_report") or {}).get("warnings", []),
         "ok": all(r["status"] != "failed" for r in results) and len(results) == len(STAGES),
         "stages": results,
         "folder": str(folder),
@@ -158,6 +185,7 @@ def run_pipeline(source, name=None, out=None, use_llm=True, log=print):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the whole GreatTest pipeline on an agent repo.")
     parser.add_argument("source", help="git URL, .zip file or folder")
+    parser.add_argument("--spec", help="Phase 0 requirements spec (JSON); make one with python -m understand.phase0 ask")
     parser.add_argument("--name", help="agent name for the output folder (default: from the source)")
     parser.add_argument("--out", help="base output folder (default: outputs/)")
     parser.add_argument("--no-llm", action="store_true", help="skip the LLM step (rule-based model only)")
@@ -165,8 +193,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        summary = run_pipeline(args.source, args.name, args.out, use_llm=not args.no_llm)
-    except AcquireError as exc:
+        summary = run_pipeline(args.source, args.name, args.out, use_llm=not args.no_llm,
+                               spec_path=args.spec)
+    except (AcquireError, phase0.SpecError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"\nOutputs: {summary['folder']}")

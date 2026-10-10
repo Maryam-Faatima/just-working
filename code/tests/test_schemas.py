@@ -15,6 +15,7 @@ def load(rel_path):
     "schema_file, fixture_file",
     [
         ("schemas/test_spec.schema.json", "fixtures/test_spec.json"),
+        ("schemas/requirements_spec.schema.json", "fixtures/requirements_spec.json"),
         ("schemas/trace.schema.json", "fixtures/trace.json"),
         ("schemas/finding.schema.json", "fixtures/finding.json"),
     ],
@@ -54,4 +55,25 @@ def test_unknown_detected_by_is_rejected():
     validator = Draft202012Validator(load("schemas/model_entry.schema.json"))
     bad = load("fixtures/model_v0.json")["entries"][0]
     bad["detected_by"] = "magic"
+    assert not validator.is_valid(bad)
+
+def test_developer_stated_entry_is_accepted():
+    validator = Draft202012Validator(load("schemas/model_entry.schema.json"))
+    entry = load("fixtures/model_v0.json")["entries"][1]
+    entry["detected_by"] = "developer"
+    entry["evidence"] = [{"source": "developer", "pattern": "phase0:rule:R1"}]
+    validator.validate(entry)
+
+
+def test_unknown_evidence_source_is_rejected():
+    validator = Draft202012Validator(load("schemas/model_entry.schema.json"))
+    bad = load("fixtures/model_v0.json")["entries"][0]
+    bad["evidence"] = [{"source": "rumour"}]
+    assert not validator.is_valid(bad)
+
+
+def test_spec_with_a_misspelled_field_is_rejected():
+    validator = Draft202012Validator(load("schemas/requirements_spec.schema.json"))
+    bad = load("fixtures/requirements_spec.json")
+    bad["rule"] = bad.pop("rules")
     assert not validator.is_valid(bad)

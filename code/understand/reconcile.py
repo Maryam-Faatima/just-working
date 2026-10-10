@@ -28,7 +28,7 @@ SEVERITIES = ["info", "minor", "major", "critical"]
 DEFAULT_FAIL_SEVERITY = "major"  # used when a failed check carries no severity
 CRASH_SEVERITY = "critical"      # rubric R12: no crash or empty reply
 UNREACHABLE_MIN_RUNS = 3         # "never triggered after repeated attempts"
-
+CRASH_SEVERITY = "critical"      # rubric U1: no crash or empty reply
 
 def validate_finding(finding):
     """Raise ModelError with a readable message if the finding breaks the schema."""
