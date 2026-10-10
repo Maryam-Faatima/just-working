@@ -25,44 +25,65 @@ change, and later phases (judge, test generator) reuse the same wrapper.
 - Errors: every failure raises LLMError. If all providers fail, the message lists why each failed.
 
 ## infer.py
+
 Input: scan.json (from the scanner), the repo folder, and the rule-based V0.
 
-1. build_prompt: for each tool, the source lines with line numbers (up to 60 lines), so the
-   LLM can cite lines.
-2. The LLM replies with `capabilities` (tool names it agrees are real) and `constraints`
-   (rules the code enforces or implies, each with the tool, description, file and lines).
-3. apply_inference merges the reply:
-   - Agreed capabilities change from detected_by rule to rule+llm, and confidence rises
-     (for example 0.90 to 0.95).
-   - Each constraint becomes a model entry with detected_by llm, status unverified,
-     starting confidence 0.55, and evidence pattern llm:inferred. The text is also added to the
-     related capability's constraints list.
-4. Report: capabilities_agreed, constraints_added, constraints_rejected (with the reason).
+1. build_parts: the code the LLM may talk about. A part is a tool (labelled tool:name) or a
+   workflow step (labelled step:name), made of the graph node function plus its router
+   function. Function spans are found with ast, because the scan only records where a node
+   is registered.
+2. build_prompts: each part's source with line numbers. Parts are batched (about 12000
+   characters per prompt) so a large repo does not overflow the model.
+3. The LLM replies with capabilities (tools it agrees are real), steps (one sentence on what
+   each step does) and constraints (rules the code enforces, each with a part label, one-rule
+   description, file, lines and one quoted line of code).
+4. apply_inference merges the reply:
+   - Agreed capabilities and steps change from detected_by rule to rule+llm, and confidence
+     rises (0.90 to 0.95 for a decorator tool, 0.75 to 0.80 for a graph step). A step is only
+     upgraded if its code was shown to the LLM.
+   - Each constraint becomes a model entry with detected_by llm, status unverified, starting
+     confidence 0.55 and evidence pattern llm:inferred. The text is also added to the
+     constraints list of the capability or workflow entry it belongs to.
+5. Report: capabilities_agreed, steps_agreed, constraints_added, constraints_rejected (with
+   the reason), batches, batches_failed.
 
 ## Why the LLM only proposes
-A constraint is accepted only if its tool exists in the scan, the cited file is that tool's
-file, and the cited lines fall inside the tool's code. Anything else is rejected and counted.
-This stops a hallucinated claim from entering the model with fake evidence. The rejection
-count is a measurable quantity for the evaluation (LLM-only precision compared with rule+llm).
-Rejection also covers malformed replies: a constraint whose applies_to, description or
-file is not text, or whose finished entry fails model_entry.schema.json, is counted in
-constraints_rejected (reason "not text: ..." or "invalid entry: ...") and never raises.
-Non-text capability names are skipped. One bad item cannot stop the rest of the reply.
+A constraint is accepted only if all of these hold:
+- the part it names exists (a bare name is accepted when it is unambiguous)
+- the cited file belongs to that part and the cited lines fall inside its code
+- the quoted line really appears on the cited lines
+- the quoted line is not the docstring and not a comment, and is at least 8 characters
+- it is not a duplicate of a constraint already in the model
+Anything else is rejected with a reason and counted. Malformed replies are covered too: a
+field that is not text, or an entry that fails model_entry.schema.json, is rejected and never
+raises. The rejection count is a measurable quantity for the evaluation (LLM-only precision
+compared with rule+llm).
+
+## Reliability
+- A batch whose reply is unusable (provider error, not JSON, not an object) is tried twice.
+- If a batch still fails, the other batches are kept and batches_failed is reported.
+- If every batch fails, LLMError is raised and the CLI saves the rule-only V0.
 
 ## Running it
     python -m understand.scanner <repo or url>
     python -m understand.infer outputs/<agent>/scan.json --repo <repo folder>
-The --repo folder must be the one the scan's file paths are relative to.
-If every provider fails, a warning is printed and the rule-only V0 is still saved.
+The --repo folder must be the one the scan's file paths are relative to. The console prints
+how many items were added and the first 10 rejection reasons.
 
 ## Known limitations (stated openly)
-- Retrieval is the scanner's own index: each tool's source span goes into the prompt.
-  There is no vector index or embeddings. Large tools are cut at 60 lines.
+- Retrieval is the scanner's own index: each part's source goes into the prompt. There is no
+  vector index or embeddings. A function longer than 80 lines is cut.
+- A node function is only found if it is defined in the same file where the node is
+  registered (or the router in the file where the edge is declared). A node imported from
+  another file is not shown to the LLM and stays rule-only.
+- The quote check proves the cited code exists, not that it supports the rule. A plausible
+  but wrong reading of real code is still possible. Runtime tests are what confirm or
+  contradict it.
 - Only the code is read. Developer rules from Phase 0 are not merged yet (needs a schema
   change, see decisions.md).
-- Inferred constraints start at 0.55 and are only as good as the model. They stay
-  unverified until a runtime test confirms or contradicts them.
-- LLM output can differ between providers. The cache makes a run repeatable, but a fresh run
-  on a new prompt can give different constraints.
-- The provider calls were checked with fakes in unit tests. Live calls depend on your keys,
-  quota and the model names being available.
+- Inferred constraints start at 0.55 and stay unverified until a runtime test confirms or
+  contradicts them.
+- LLM output can differ between providers. The cache makes a run repeatable, but a new
+  prompt can give different constraints.
+- The provider calls are tested with fakes in unit tests. Live calls depend on keys, quota
+  and model names being available.

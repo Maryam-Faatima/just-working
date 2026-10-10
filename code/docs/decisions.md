@@ -20,3 +20,6 @@
 | 16 | Keys from .env | A small loader in llm.py, no new dependency; real environment variables win | Keys never enter git; CI and teammates can use real environment variables | 2026-10-09 |
 | 17 | LLM reply fields are type-checked | Non-text fields and entries that fail the schema are rejected and counted, never raised | A malformed LLM reply must not crash the run; every rejection stays visible in the report | 2026-10-10 |
 | 18 | Model names are config, errors show provider text | Defaults updated to gemini-3.5-flash and openai/gpt-oss-120b; HTTP errors keep the response body | Both original defaults were retired, and a bare 404 hid why | 2026-10-10 |
+| 19 | LLM sees tools and workflow steps | Prompt includes graph node functions and routers, found with ast | The real business rules in a LangGraph agent live in nodes and routers, not tools | 2026-10-10 |
+| 20 | Constraint must quote one line of code | The quote is checked against the cited lines, and rejected if it is a comment or the docstring | The old check only proved the lines were inside the function, so docstring restatements passed | 2026-10-10 |
+| 21 | Batching, retry, partial failure | Parts sent in batches of about 12000 characters, 2 tries per batch, failed batches reported | Larger repos and flaky providers must not lose the whole run | 2026-10-10 |

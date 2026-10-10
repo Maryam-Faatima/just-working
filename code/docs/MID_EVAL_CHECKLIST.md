@@ -17,7 +17,7 @@ Last updated: 2026-10-10
 - Done: schemas + fixtures, acquire, scanner (AST + LangGraph edges), confidence baseline,
   model_store, md/console/mermaid/html outputs, CI, LLM wrapper (Gemini/Groq, disk cache),
   LLM inference with evidence check (live run on trip-planner-agent: 3 agreed, 2 constraints
-  added, 0 rejected), 80 tests.
+  added, 0 rejected), 101 tests.
 - Not started: target agent, adapter/personas/traces/checks, call graph, reconcile.py,
   evidence graph, report, CLI entry point, CD, tag.
 
