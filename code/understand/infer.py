@@ -7,16 +7,17 @@ the docstring or a comment. Rejections are counted with a reason, so a hallucina
 claim is never stored silently.
 
 A "part" is what the LLM is shown: a tool, or a workflow step (the graph node function
-plus its router function, if the step has one).
+plus its router function, if the step has one). The call graph (understand/callgraph.py)
+finds where those functions are defined and which helper functions they call, so the LLM
+also sees the code a tool or step delegates to. This is the retrieval step of slide 6:
+call graph, then component interactions, then LLM inference.
 """
-import ast
 import copy
 import json
 import re
-from functools import cache
 from pathlib import Path
 
-from understand import llm
+from understand import callgraph, llm
 from understand.confidence import baseline_confidence
 from understand.model_store import ModelError, validate_entry
 
@@ -28,6 +29,10 @@ SYSTEM = (
 INSTRUCTIONS = """Below are parts of an agent's code with line numbers. A part is a tool \
 or a workflow step (a graph node function, plus its router function if it has one). \
 Each part starts with a header such as "### tool:search_flights" or "### step:budget_critic".
+
+A line such as "[helper (called by x) in f.py]" is a function that the part calls. You may \
+cite its lines, applies_to is still the part's label. A line starting with "Reaches tools:" is \
+a fact from the call graph.
 
 Reply as {"capabilities": [...], "steps": [...], "constraints": [...]}.
 
@@ -49,6 +54,7 @@ comment. If the code enforces no rule, return an empty list. One rule per item. 
 
 MAX_PART_LINES = 80     # lines of one function shown to the LLM
 MAX_BATCH_CHARS = 12000  # parts are sent in batches of about this size
+MAX_CALLEES = 4         # helper functions shown per part
 MIN_QUOTE_CHARS = 8
 SUMMARY_LIMIT = 200
 ATTEMPTS = 2            # tries per batch when the reply is unusable
@@ -56,63 +62,73 @@ ATTEMPTS = 2            # tries per batch when the reply is unusable
 
 # ---------------------------------------------------------------- parts of the code
 
-@cache
-def _functions(repo_root, file):
-    """name -> ast function node for one file ({} if unreadable or not valid Python)."""
-    try:
-        tree = ast.parse((Path(repo_root) / file).read_text(encoding="utf-8"))
-    except (OSError, SyntaxError, ValueError):
-        return {}
-    found = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            found.setdefault(node.name, node)
-    return found
-
-
-def _add_function_span(part, repo_root, file, func):
-    node = _functions(str(repo_root), file).get(func)
-    if node is None:
+def _add_function(part, function, caller=None):
+    """Add one call-graph function to a part as a span the LLM can cite."""
+    if any(s["file"] == function["file"] and s["start"] == function["start"] for s in part["spans"]):
         return
-    start = min([node.lineno] + [d.lineno for d in node.decorator_list])
-    part["spans"].append({"file": file, "start": start, "end": node.end_lineno, "what": func})
-    doc = ast.get_docstring(node, clean=False)
-    if doc:
-        part["docs"].append(doc)
+    what = function["name"] + (f" (called by {caller})" if caller else "")
+    part["spans"].append({"file": function["file"], "start": function["start"],
+                          "end": function["end"], "what": what})
+    if function["docstring"]:
+        part["docs"].append(function["docstring"])
 
 
-def build_parts(scan, repo_root=None):
+def _add_callees(part, graph, by_id, function_id, caller):
+    for callee_id in callgraph.callees(graph, function_id):
+        if len(part["spans"]) >= 1 + MAX_CALLEES + part["routers"]:
+            return
+        _add_function(part, by_id[callee_id], caller)
+
+
+def build_parts(scan, repo_root=None, graph=None):
     """Everything the LLM may talk about, keyed by label ("tool:x", "step:y").
 
-    Tools come from the scan alone. Workflow steps need the repo, because the scan
-    records where a node is registered, not where its function is defined.
+    Tools come from the scan. Workflow steps need the repo, because the scan only records
+    where a node is registered. The call graph locates the node function wherever it is
+    defined, adds the router function, and adds the helpers they call.
     """
+    if graph is None and repo_root is not None:
+        graph = callgraph.build_callgraph(repo_root, scan)
+    by_id = {f["id"]: f for f in graph["functions"]} if graph else {}
+
     parts = {}
     for tool in scan.get("tools", []):
         label = f"tool:{tool['name']}"
-        if label not in parts:
-            parts[label] = {
-                "kind": "tool", "name": tool["name"],
+        if label in parts:
+            continue
+        part = {"kind": "tool", "name": tool["name"], "routers": 0, "note": "",
                 "spans": [{"file": tool["file"], "start": tool["start_line"],
                            "end": tool["end_line"], "what": tool["name"]}],
-                "docs": [tool.get("docstring") or ""],
-            }
-    if repo_root is None:
+                "docs": [tool.get("docstring") or ""]}
+        function_id = f"{tool['file']}::{tool['name']}"
+        if function_id in by_id:
+            _add_callees(part, graph, by_id, function_id, tool["name"])
+        parts[label] = part
+    if graph is None:
         return parts
 
+    interactions = {i["step"]: i for i in graph.get("interactions", [])}
     for node in scan.get("nodes", []):
         label = f"step:{node['name']}"
         if label in parts or not node.get("function"):
             continue
-        part = {"kind": "step", "name": node["name"], "spans": [], "docs": []}
-        _add_function_span(part, repo_root, node["file"], node["function"])
-        if part["spans"]:
-            parts[label] = part
-    for edge in scan.get("edges", []):
-        part = parts.get(f"step:{edge['from']}")
-        router = edge.get("condition")
-        if part and router and all(s["what"] != router for s in part["spans"]):
-            _add_function_span(part, repo_root, edge["file"], router)
+        part = {"kind": "step", "name": node["name"], "routers": 0, "spans": [], "docs": [], "note": ""}
+        roots = [callgraph.find_function(graph, node["function"], node["file"])]
+        for edge in scan.get("edges", []):
+            if edge["from"] == node["name"] and edge.get("condition"):
+                roots.append(callgraph.find_function(graph, edge["condition"], edge["file"]))
+        roots = [r for r in dict.fromkeys(roots) if r]
+        if not roots:
+            continue
+        for root in roots:
+            _add_function(part, by_id[root])
+        part["routers"] = len(roots) - 1
+        for root in roots:
+            _add_callees(part, graph, by_id, root, by_id[root]["name"])
+        tools = [t["name"] for t in interactions.get(node["name"], {}).get("tools", [])]
+        if tools:
+            part["note"] = f"Reaches tools: {', '.join(tools)}"
+        parts[label] = part
     return parts
 
 
@@ -133,7 +149,8 @@ def build_prompts(parts, repo_root):
         body = "\n".join(
             f"[{s['what']} in {s['file']}]\n{_snippet(repo_root, s)}" for s in part["spans"]
         )
-        texts.append(f"### {label}\n{body}")
+        note = f"{part['note']}\n" if part.get("note") else ""
+        texts.append(f"### {label}\n{note}{body}")
     batches, current, size = [], [], 0
     for text in texts:
         if current and size + len(text) > MAX_BATCH_CHARS:
@@ -302,9 +319,9 @@ def apply_inference(store, scan, reply, repo_root=None, parts=None):
 
 # ---------------------------------------------------------------- running it
 
-def infer_v0(scan, repo_root, store):
+def infer_v0(scan, repo_root, store, graph=None):
     """Ask the LLM about every part of the agent and merge what survives the checks."""
-    parts = build_parts(scan, repo_root)
+    parts = build_parts(scan, repo_root, graph)
     prompts = build_prompts(parts, repo_root)
     total = {"capabilities_agreed": 0, "steps_agreed": 0, "constraints_added": 0,
              "constraints_rejected": [], "batches": len(prompts), "batches_failed": 0}

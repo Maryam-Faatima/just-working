@@ -46,18 +46,18 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     summary, lines = run(repo, tmp_path, use_llm=False)
     folder = tmp_path / "out" / "my-agent"
     for name in ("scan.json", "scan.html", "scan.md", "model_v0_rule.json",
-                 "model_v0.json", "run_summary.json"):
+                 "model_v0.json", "callgraph.json", "callgraph.md", "run_summary.json"):
         assert (folder / name).exists(), name
     assert summary["ok"] is True
-    assert statuses(summary) == {"scan": "ok", "model": "ok", "infer": "skipped",
-                                 "test": "skipped", "report": "skipped"}
-    assert len(lines) == 5
+    assert statuses(summary) == {"scan": "ok", "callgraph": "ok", "model": "ok",
+                                 "infer": "skipped", "test": "skipped", "report": "skipped"}
+    assert len(lines) == 6
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
     assert {e["name"] for e in model["entries"]} == {"search_things", "delete_thing"}
 
 
 def test_llm_failure_keeps_the_rule_based_model(repo, tmp_path, monkeypatch):
-    def broken(scan, repo_root, store):
+    def broken(scan, repo_root, store, graph=None):
         raise llm.LLMError("no key")
 
     monkeypatch.setattr(pipeline.infer, "infer_v0", broken)
@@ -68,7 +68,7 @@ def test_llm_failure_keeps_the_rule_based_model(repo, tmp_path, monkeypatch):
 
 
 def test_llm_result_overwrites_model_v0(repo, tmp_path, monkeypatch):
-    def fake(scan, repo_root, store):
+    def fake(scan, repo_root, store, graph=None):
         store.entries[next(iter(store.entries))]["description"] = "changed by llm"
         return {"capabilities_agreed": 1, "constraints_added": 0, "constraints_rejected": [],
                 "batches": 1, "batches_failed": 0}

@@ -14,12 +14,11 @@
 
 ## Status snapshot (update this each session)
 Last updated: 2026-10-10
-- Done: schemas + fixtures, acquire, scanner (AST + LangGraph edges), confidence baseline,
-  model_store, md/console/mermaid/html outputs, CI, LLM wrapper (Gemini/Groq, disk cache),
-  LLM inference with evidence check (live run on trip-planner-agent: 3 agreed, 2 constraints
-  added, 0 rejected), 101 tests.
-- Not started: target agent, adapter/personas/traces/checks, call graph, reconcile.py,
-  evidence graph, report, CLI entry point, CD, tag.
+- Done: schemas + fixtures, acquire, scanner, call graph + component interactions, confidence
+  baseline, model_store, md/console/mermaid/html outputs, CI, LLM wrapper, LLM inference over the
+  call graph, reconcile.py, one-command pipeline, 140 tests.
+- Not started: target agent, adapter/personas/traces/checks, Phase 0 questionnaire + rubric,
+  evidence graph, report, live flip on a real trace, CD, tag.
 
 ## A. Repo hygiene
 - [x] main protected, develop branch, CI on push/PR (ruff + pytest)
@@ -37,7 +36,7 @@ Last updated: 2026-10-10
 ## C. Phase 1 (understand)
 - [x] Repo acquisition (git URL, zip, local path)
 - [x] Scanner: tools, registrations, LangGraph edges
-- [ ] Function-level call graph for direct calls (tests incl. an unresolved call case)
+- [x] Function-level call graph for direct calls (tests incl. an unresolved call case)
 - [x] LLM wrapper: one function, Gemini primary, Groq fallback, disk cache
 - [x] LLM inference producing V0 entries (capabilities, workflows, constraints) with evidence + confidence
 - [x] Validate LLM output against model_entry schema; reject and retry on invalid
@@ -45,8 +44,8 @@ Last updated: 2026-10-10
 - [x] Model store with five statuses and bounded confidence update (unit tested)
 
 ## D. Reconciliation
-- [ ] understand/reconcile.py: trace + rubric item to outcome to ModelStore.apply_outcome
-- [ ] Unit tests: confirmed, contradicted, unreachable, discovered
+- [x] understand/reconcile.py: trace + rubric item to outcome to ModelStore.apply_outcome
+- [x] Unit tests: confirmed, contradicted, unreachable, discovered
 - [ ] Live flip: cancel_booking unverified to contradicted on a real trace
 - [ ] Recorded-good trace kept as demo fallback
 

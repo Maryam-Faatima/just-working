@@ -5,13 +5,24 @@ from understand.infer import apply_inference, build_parts, build_prompts, infer_
 from understand.model_store import ModelError, build_v0
 
 AGENT_PY = '''from langchain_core.tools import tool
-
+from helpers import do_cancel
 @tool
 def cancel_booking(booking_id):
     """Cancel a booking. Always asks the user first."""
     if not state.confirmed:
         return "Please confirm before cancelling."
     return do_cancel(booking_id)
+'''
+
+HELPERS_PY = '''def do_cancel(booking_id):
+    """Cancel it."""
+    if not booking_exists(booking_id):
+        raise ValueError("unknown booking")
+    return True
+
+
+def remote_node(state):
+    return state
 '''
 
 GRAPH_PY = '''MAX_RETRIES = 2
@@ -55,6 +66,7 @@ STEP_RULE = {
 def repo(tmp_path):
     (tmp_path / "agent.py").write_text(AGENT_PY, encoding="utf-8")
     (tmp_path / "graph.py").write_text(GRAPH_PY, encoding="utf-8")
+    (tmp_path / "helpers.py").write_text(HELPERS_PY, encoding="utf-8")
     return tmp_path
 
 
@@ -84,6 +96,41 @@ def test_prompt_has_labels_and_numbered_lines(repo):
 def test_large_repos_are_split_into_batches(repo, monkeypatch):
     monkeypatch.setattr(infer, "MAX_BATCH_CHARS", 10)
     assert len(build_prompts(build_parts(SCAN, repo), repo)) == 2
+
+
+def test_helper_a_tool_calls_is_shown_and_can_be_cited(repo):
+    parts = build_parts(SCAN, repo)
+    assert [s["what"] for s in parts["tool:cancel_booking"]["spans"]] == [
+        "cancel_booking", "do_cancel (called by cancel_booking)"]
+    rule = {**TOOL_RULE, "file": "helpers.py", "lines": "3-4",
+            "description": "Refuses to cancel a booking that does not exist",
+            "code": "if not booking_exists(booking_id):"}
+    report = apply_inference(build_v0(SCAN), SCAN, {"constraints": [rule]}, repo)
+    assert report["constraints_added"] == 1
+
+
+def test_node_function_defined_in_another_file_is_found(repo):
+    remote = {"name": "remote", "function": "remote_node", "file": "graph.py", "line": 23}
+    scan = {**SCAN, "nodes": SCAN["nodes"] + [remote]}
+    spans = build_parts(scan, repo)["step:remote"]["spans"]
+    assert [(s["file"], s["what"]) for s in spans] == [("helpers.py", "remote_node")]
+
+
+def test_prompt_says_which_tools_a_step_reaches(tmp_path):
+    (tmp_path / "tools.py").write_text("@tool\ndef lookup(q):\n    return q\n", encoding="utf-8")
+    (tmp_path / "agent.py").write_text(
+        "from tools import lookup\nbot = create_react_agent(None, tools=[lookup])\n\n\n"
+        "def run(t):\n    return bot.invoke(t)\n", encoding="utf-8")
+    (tmp_path / "graph.py").write_text(
+        "from agent import run\n\n\ndef work_node(s):\n    return run(s)\n", encoding="utf-8")
+    scan = {"tools": [{"name": "lookup", "file": "tools.py", "start_line": 1, "end_line": 3, "docstring": ""}],
+            "registrations": [{"call": "create_react_agent", "tools": ["lookup"], "file": "agent.py", "line": 2}],
+            "nodes": [{"name": "work", "function": "work_node", "file": "graph.py", "line": 9}],
+            "edges": []}
+    parts = build_parts(scan, tmp_path)
+    assert parts["step:work"]["note"] == "Reaches tools: lookup"
+    (prompt,) = build_prompts(parts, tmp_path)
+    assert "Reaches tools: lookup" in prompt
 
 
 # ---- accepting proposals

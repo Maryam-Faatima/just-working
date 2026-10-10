@@ -28,23 +28,24 @@ change, and later phases (judge, test generator) reuse the same wrapper.
 
 Input: scan.json (from the scanner), the repo folder, and the rule-based V0.
 
-1. build_parts: the code the LLM may talk about. A part is a tool (labelled tool:name) or a
+1. The call graph also adds the helper functions each part calls (up to 4) and a ‘Reaches tools’ line for steps.
+2. build_parts: the code the LLM may talk about. A part is a tool (labelled tool:name) or a
    workflow step (labelled step:name), made of the graph node function plus its router
    function. Function spans are found with ast, because the scan only records where a node
    is registered.
-2. build_prompts: each part's source with line numbers. Parts are batched (about 12000
+3. build_prompts: each part's source with line numbers. Parts are batched (about 12000
    characters per prompt) so a large repo does not overflow the model.
-3. The LLM replies with capabilities (tools it agrees are real), steps (one sentence on what
+4. The LLM replies with capabilities (tools it agrees are real), steps (one sentence on what
    each step does) and constraints (rules the code enforces, each with a part label, one-rule
    description, file, lines and one quoted line of code).
-4. apply_inference merges the reply:
+5. apply_inference merges the reply:
    - Agreed capabilities and steps change from detected_by rule to rule+llm, and confidence
      rises (0.90 to 0.95 for a decorator tool, 0.75 to 0.80 for a graph step). A step is only
      upgraded if its code was shown to the LLM.
    - Each constraint becomes a model entry with detected_by llm, status unverified, starting
      confidence 0.55 and evidence pattern llm:inferred. The text is also added to the
      constraints list of the capability or workflow entry it belongs to.
-5. Report: capabilities_agreed, steps_agreed, constraints_added, constraints_rejected (with
+6. Report: capabilities_agreed, steps_agreed, constraints_added, constraints_rejected (with
    the reason), batches, batches_failed.
 
 ## Why the LLM only proposes
@@ -73,9 +74,7 @@ how many items were added and the first 10 rejection reasons.
 ## Known limitations (stated openly)
 - Retrieval is the scanner's own index: each part's source goes into the prompt. There is no
   vector index or embeddings. A function longer than 80 lines is cut.
-- A node function is only found if it is defined in the same file where the node is
-  registered (or the router in the file where the edge is declared). A node imported from
-  another file is not shown to the LLM and stays rule-only.
+- Helpers are limited to direct callees (depth 1) and 4 per part. Deeper helpers are not shown.
 - The quote check proves the cited code exists, not that it supports the rule. A plausible
   but wrong reading of real code is still possible. Runtime tests are what confirm or
   contradict it.

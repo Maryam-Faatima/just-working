@@ -6,17 +6,18 @@ The target repo is acquired once and kept open while every stage runs, so later 
 (for example the testing engine) can start the agent from its real folder.
 
 Stages run in order and share one context dict:
-  scan    acquire the repo, scan it, write scan.json / scan.html / scan.md
-  model   build the rule-based Behavioral Model V0 (model_v0_rule.json and model_v0.json)
-  infer   ask the LLM to cross-check V0 and add constraints (overwrites model_v0.json)
-  test    OPTIONAL hook: testing.runner.run(ctx), the testing lane plugs in here
-  report  OPTIONAL hook: evidence.report.build(ctx), the evidence lane plugs in here
+  scan       acquire the repo, parse it (framework-aware AST), write scan.json / scan.html / scan.md
+  callgraph  build the call graph and the component interactions, write callgraph.json / .md
+  model      build the rule-based Behavioral Model V0 (model_v0_rule.json and model_v0.json)
+  infer      ask the LLM to cross-check V0 and add constraints (overwrites model_v0.json)
+  test       OPTIONAL hook: testing.runner.run(ctx), the testing lane plugs in here
+  report     OPTIONAL hook: evidence.report.build(ctx), the evidence lane plugs in here
 
 A hook is a function that takes ctx and returns a short text (or None). Until the module
 exists the stage is reported as "skipped". If a hook exists and raises, the stage is
 reported as "failed" and the run continues with the next stage.
 
-ctx keys: source, name, use_llm, repo_root, folder, scan, store.
+ctx keys: source, name, use_llm, repo_root, folder, scan, callgraph, store.
 Everything is summarised in <output folder>/run_summary.json.
 Exit code: 0 all stages ok or skipped, 1 a stage failed, 2 the source could not be opened.
 """
@@ -28,7 +29,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from understand import infer, llm
+from understand import callgraph, infer, llm
 from understand.acquire import AcquireError, head_commit, open_source
 from understand.model_store import build_v0
 from understand.outputs import DEFAULT_OUTPUT_DIR, agent_name, write_scan_outputs
@@ -52,6 +53,18 @@ def stage_scan(ctx):
     return "ok", detail
 
 
+def stage_callgraph(ctx):
+    graph = callgraph.build_callgraph(ctx["repo_root"], ctx["scan"])
+    callgraph.write_outputs(graph, ctx["folder"])
+    ctx["callgraph"] = graph
+    s = graph["stats"]
+    detail = (f"{s['functions']} functions, {s['resolved']} resolved calls, "
+              f"{s['agent_calls']} agent calls, {s['unresolved']} unresolved")
+    if s["parse_errors"]:
+        return "warning", f"{detail}, {s['parse_errors']} files could not be parsed"
+    return "ok", detail
+
+
 def stage_model(ctx):
     store = build_v0(ctx["scan"])
     store.save(ctx["folder"] / "model_v0_rule.json")
@@ -66,7 +79,7 @@ def stage_infer(ctx):
     if not ctx["use_llm"]:
         return "skipped", "--no-llm: model_v0.json holds the rule-based model"
     try:
-        report = infer.infer_v0(ctx["scan"], ctx["repo_root"], ctx["store"])
+        report = infer.infer_v0(ctx["scan"], ctx["repo_root"], ctx["store"], ctx.get("callgraph"))
     except llm.LLMError as exc:
         return "warning", f"LLM unavailable, kept the rule-based model ({exc})"
     ctx["store"].save(ctx["folder"] / "model_v0.json")
@@ -96,6 +109,7 @@ def optional_stage(module, function):
 
 STAGES = [
     ("scan", stage_scan),
+    ("callgraph", stage_callgraph),
     ("model", stage_model),
     ("infer", stage_infer),
     ("test", optional_stage("testing.runner", "run")),
@@ -122,7 +136,7 @@ def run_pipeline(source, name=None, out=None, use_llm=True, log=print):
                 status, detail = "failed", f"{type(exc).__name__}: {exc}"
             seconds = round(time.perf_counter() - began, 2)
             results.append({"stage": stage, "status": status, "detail": detail, "seconds": seconds})
-            log(f"[{number}/{len(STAGES)}] {stage:<7} {status:<8} {detail} ({seconds}s)")
+            log(f"[{number}/{len(STAGES)}] {stage:<9} {status:<8} {detail} ({seconds}s)")
             if status == "failed" and stage in REQUIRED_STAGES:
                 break
 
