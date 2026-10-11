@@ -50,5 +50,5 @@ def test_http_error_keeps_the_provider_message(monkeypatch):
         raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, body)
 
     monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)
-    with pytest.raises(llm.LLMError, match="HTTP 404.*model not found"):
+    with pytest.raises(llm.LLMError, match=r"HTTP 404.*model not found"):
         llm._post("https://example.test", {}, {})

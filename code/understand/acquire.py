@@ -9,7 +9,6 @@ import re
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 import zipfile
 from contextlib import contextmanager
@@ -112,10 +111,7 @@ def _on_remove_error(func, path, _exc):
 
 
 def _remove_tree(path):
-    if sys.version_info >= (3, 12):
-        shutil.rmtree(path, onexc=_on_remove_error)
-    else:
-        shutil.rmtree(path, onerror=_on_remove_error)
+    shutil.rmtree(path, onexc=_on_remove_error)
 
 
 @contextmanager

@@ -312,7 +312,7 @@ def apply_inference(store, scan, reply, repo_root=None, parts=None):
             current = store.get(host["id"])
             texts = list(current.get("constraints", []))
             if c["description"] not in texts:
-                _upgrade(store, current, constraints=texts + [c["description"]])
+                _upgrade(store, current, constraints=[*texts, c["description"]])
         report["constraints_added"] += 1
     return report
 

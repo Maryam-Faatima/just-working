@@ -208,7 +208,7 @@ class _Resolver:
             target = self.lookup(module_file, rest[0]) or ("missing",)
             rest = rest[1:]
         if target and target[0] == "external":
-            return ("external", ".".join([target[1]] + rest))
+            return ("external", ".".join([target[1], *rest]))
         return target if not rest else None
 
     def value_type(self, call, file, imports):
@@ -248,7 +248,7 @@ class _Resolver:
         if kind[0] == "builtin":
             return None
         if kind[0] == "external":
-            return ("external", ".".join([kind[1]] + rest))
+            return ("external", ".".join([kind[1], *rest]))
         file, cls = kind[1], kind[2]
         if len(rest) != 1:
             return ("unresolved", "call through an attribute of an instance")
@@ -297,7 +297,7 @@ class _Resolver:
             return ("unresolved", "name not found")
         kind = target[0]
         if kind == "external":
-            return ("external", ".".join([target[1]] + rest))
+            return ("external", ".".join([target[1], *rest]))
         if kind == "missing":
             return ("unresolved", "imported name not found in its module")
         if kind == "function":
@@ -373,7 +373,7 @@ def _chain(node):
         parts.append(node.attr)
         node = node.value
     if isinstance(node, ast.Name):
-        return [node.id] + parts[::-1]
+        return [node.id, *parts[::-1]]
     return None
 
 
@@ -622,7 +622,7 @@ def to_markdown(graph):
         via = "; ".join(" > ".join(t["path"]) for t in item["tools"]) or ""
         rows.append(f"| {_cell(item['step'])} | {_cell(roots)} | {_cell(tools)} | {_cell(via)} |")
     if rows:
-        out += ["| Step | Function | Reaches tools | Path |", "|---|---|---|---|"] + rows
+        out += ["| Step | Function | Reaches tools | Path |", "|---|---|---|---|", *rows]
     else:
         out.append("_none (no workflow steps in the scan)_")
     out += ["", "## Diagram", "", "```mermaid", to_mermaid(graph).rstrip(), "```", "",
@@ -630,7 +630,7 @@ def to_markdown(graph):
     rows = [f"| {_cell(_short(u['from']))} | {_cell(u['call'])} | {u['line']} | {_cell(u['reason'])} |"
             for u in graph["unresolved"][:MAX_UNRESOLVED_ROWS]]
     if rows:
-        out += ["| In function | Call | Line | Why |", "|---|---|---|---|"] + rows
+        out += ["| In function | Call | Line | Why |", "|---|---|---|---|", *rows]
         if len(graph["unresolved"]) > MAX_UNRESOLVED_ROWS:
             out.append(f"\n_{len(graph['unresolved']) - MAX_UNRESOLVED_ROWS} more in callgraph.json_")
     else:
