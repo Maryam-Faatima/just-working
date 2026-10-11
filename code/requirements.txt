@@ -4,3 +4,4 @@ jsonschema
 fastapi
 uvicorn
 python-multipart
+httpx

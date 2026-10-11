@@ -15,7 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import run_pipeline
+from understand import phase0
 from understand.outputs import agent_name, safe_name
+from understand.phase0 import SpecError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("greattest-api")
@@ -124,22 +126,21 @@ def _execute_run(source: str, name: str, use_llm: bool, spec_data: dict[str, Any
         "error": None,
     }
 
-    agent_out = _agent_dir(name)
-    agent_out.mkdir(parents=True, exist_ok=True)
-    saved_spec_file = agent_out / "spec.json"
-
-    spec_temp_file = None
-    if spec_data and spec_data.get("purpose"):
-        saved_spec_file.write_text(json.dumps(spec_data, indent=2), encoding="utf-8")
-        spec_temp_file = saved_spec_file
-    elif reuse_saved and saved_spec_file.exists():
-        spec_temp_file = saved_spec_file
-
     def log_progress(msg: str):
         if name in ACTIVE_RUNS:
             ACTIVE_RUNS[name]["detail"] = msg
 
     try:
+        agent_out = _agent_dir(name)
+        agent_out.mkdir(parents=True, exist_ok=True)
+        saved_spec_file = agent_out / "spec.json"
+        spec_temp_file = None
+        if spec_data:
+            saved_spec_file.write_text(json.dumps(spec_data, indent=2), encoding="utf-8")
+            spec_temp_file = saved_spec_file
+        elif reuse_saved and saved_spec_file.exists():
+            spec_temp_file = saved_spec_file
+
         summary = run_pipeline(
             source=source,
             name=name,
@@ -184,7 +185,12 @@ def trigger_run(payload: RunRequest, background_tasks: BackgroundTasks):
             "message": f"Run for {name} is already in progress.",
         }
 
-    spec_dict = payload.spec
+    spec_dict = None
+    if payload.spec is not None:
+        try:
+            spec_dict = phase0.normalize_spec(payload.spec)
+        except SpecError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     background_tasks.add_task(
         _execute_run,

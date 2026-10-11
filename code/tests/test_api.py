@@ -77,11 +77,9 @@ def test_upload_too_large(tmp_path, monkeypatch):
     assert not (tmp_path / "large_agent.zip").exists()
 
 
-def test_run_request_payload_dict_spec():
-    req = api.RunRequest(
-        source="target_agent",
-        name="test-agent",
-        spec={"purpose": "Custom purpose", "rules": []},
-    )
-    assert req.spec == {"purpose": "Custom purpose", "rules": []}
-    assert req.name == "test-agent"
+def test_invalid_spec_is_rejected_before_any_run(monkeypatch):
+    started = []
+    monkeypatch.setattr(api, "_execute_run", lambda *args: started.append(args))
+    res = client.post("/api/run", json={"source": "x", "name": "bad-spec-agent", "spec": {}})
+    assert res.status_code == 422
+    assert not started
