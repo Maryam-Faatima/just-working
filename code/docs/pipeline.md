@@ -40,7 +40,7 @@ The order follows slide 6: Phase 0 first, then Phase 1 (scan, call graph, model,
 | # | Stage | What it does | Writes |
 |---|---|---|---|
 | 1 | spec | Phase 0: loads and validates the developer spec. Skipped without one | none |
-| 2 | scan | Opens the source once and scans it | scan.json, scan.html, scan.md |
+| 2 | scan | Opens the source once, scans it and lists the doc and config files | scan.json (with context_files), scan.html, scan.md |
 | 3 | callgraph | Builds the call graph and the component interactions | callgraph.json, callgraph.md |
 | 4 | model | Builds the rule-based model, adds the developer's rules, writes the rubric | model_v0_rule.json, model_v0.json, rubric.json, spec.json (with a spec) |
 | 5 | infer | Asks the LLM to cross-check V0 and add constraints | model_v0.json (updated) |

@@ -43,7 +43,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from understand import callgraph, infer, llm, phase0
+from understand import callgraph, context_files, infer, llm, phase0
 from understand.acquire import (
     DEFAULT_CLONE_DIR,
     AcquireError,
@@ -75,6 +75,7 @@ def stage_spec(ctx):
 
 def stage_scan(ctx):
     scan = scan_repo(ctx["repo_root"])
+    scan["context_files"] = context_files.list_context_files(ctx["repo_root"])
     scan["source"] = ctx["source"]
     scan["commit"] = head_commit(ctx["repo_root"])
     scan["agent"] = ctx["name"]
@@ -82,11 +83,11 @@ def stage_scan(ctx):
     ctx["scan"] = scan
     ctx["folder"] = write_scan_outputs(scan, ctx["name"], ctx["out"])
     detail = (f"{scan['files_scanned']} files, {len(scan['tools'])} tools, "
-              f"{len(scan['nodes'])} nodes, {len(scan['edges'])} edges")
+              f"{len(scan['nodes'])} nodes, {len(scan['edges'])} edges, "
+              f"{len(scan['context_files'])} doc/config files")
     if scan["errors"]:
         return "warning", f"{detail}, {len(scan['errors'])} files could not be parsed"
     return "ok", detail
-
 
 def stage_callgraph(ctx):
     graph = callgraph.build_callgraph(ctx["repo_root"], ctx["scan"])

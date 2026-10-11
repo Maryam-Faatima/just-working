@@ -9,6 +9,7 @@ It never imports or executes the target agent, so scanning is safe.
 ## Why these outputs
 Tool name, file and line range become the `evidence` field of a model entry
 (for example booking_agent.py lines 72-91). Nodes and edges become workflow and state entries.
+Docs and config files are not read here. See docs/context_files.md.
 
 ## Detected patterns
 Decorators (tool, function_tool, tool_plain, kernel_function, register_for_llm), tool constructors

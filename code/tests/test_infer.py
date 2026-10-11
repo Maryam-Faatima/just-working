@@ -3,6 +3,7 @@ import pytest
 from understand import infer, llm
 from understand.infer import apply_inference, build_parts, build_prompts, infer_v0
 from understand.model_store import ModelError, build_v0
+from understand import context_files 
 
 AGENT_PY = '''from langchain_core.tools import tool
 from helpers import do_cancel
@@ -281,3 +282,34 @@ def test_every_batch_failing_raises(repo, monkeypatch):
     monkeypatch.setattr(llm, "complete_json", down)
     with pytest.raises(llm.LLMError, match="down"):
         infer_v0(SCAN, repo, build_v0(SCAN))
+
+def test_background_comes_before_the_parts(repo):
+    (repo / "README.md").write_text("Cancels bookings for guests.", encoding="utf-8")
+    context = context_files.render_context(repo, context_files.list_context_files(repo))
+    (prompt,) = build_prompts(build_parts(SCAN, repo), repo, context)
+    assert "Cancels bookings for guests." in prompt
+    assert prompt.index("BACKGROUND") < prompt.index("### tool:cancel_booking")
+
+
+def test_prompt_without_background_is_unchanged(repo):
+    parts = build_parts(SCAN, repo)
+    assert build_prompts(parts, repo) == build_prompts(parts, repo, "")
+
+
+def test_a_doc_cannot_be_cited_as_evidence(repo):
+    (repo / "README.md").write_text("Always confirm before cancelling.\n", encoding="utf-8")
+    bad = constraint(file="README.md", lines="1-1", code="Always confirm before cancelling.")
+    store = build_v0(SCAN)
+    report = apply_inference(store, SCAN, {"constraints": [bad]}, repo)
+    assert report["constraints_added"] == 0
+    assert "not the part's file" in report["constraints_rejected"][0]["reason"]
+
+
+def test_infer_v0_sends_the_background_from_the_scan(repo, monkeypatch):
+    (repo / "README.md").write_text("Cancels bookings for guests.", encoding="utf-8")
+    scan = {**SCAN, "context_files": context_files.list_context_files(repo)}
+    seen = []
+    monkeypatch.setattr(infer.llm, "complete_json", lambda prompt, system: seen.append(prompt) or {})
+    report = infer_v0(scan, repo, build_v0(scan))
+    assert seen and all("Cancels bookings for guests." in p for p in seen)
+    assert report["context_files"] == 1

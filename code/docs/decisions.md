@@ -46,3 +46,7 @@
 | 42 | Agent framework (first target) | LangGraph | The testbed agent is built on it; the adapter and AST parser target it first | 2026-10-11 |
 | 43 | Plan node tool exposure | LLM sees only plannable tools | get_return_flights is driven by select_return_flight; exposing it crashed plan_trip | 2026-10-11 |
 | 44 | GRAPH_EDGES labels | Must match router labels exactly | It is the ground truth for scoring Phase 1 call-graph recall | 2026-10-11 |
+| 45 | Docs and configs are background, never evidence | A BACKGROUND block goes before the code in each prompt. A constraint must still quote one line of code | Slide 6 lists Code + Docs + Configs as inputs. A README can be stale, so it can help the LLM read the code but cannot create a claim (decision 21 still holds). The prompt marks the block as data, not instructions, since repo text is untrusted | 2026-10-11 |
+| 46 | Secrets are never read and the budget is small | .env and secret-named files skipped, KEY/TOKEN/SECRET/PASSWORD values redacted, at most 6 files and 4000 characters | The text goes to a third-party LLM. A small budget also protects free-tier rate limits and keeps retrieval explainable | 2026-10-11 |
+| 47 | Scanner stays code-only, the pipeline calls context_files | scan_repo is unchanged. stage_scan adds `context_files` to the scan | Keeps the scanner a pure AST tool, avoids a circular import, and old scan.json files still work because infer reads the key with .get | 2026-10-11 |
+

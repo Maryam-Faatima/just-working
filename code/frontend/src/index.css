@@ -1,0 +1,298 @@
+:root {
+  /* Surface & Base - Warm Luxury Palette (Orange, Black, Grey, White) */
+  --bg-app: #FAF7F2;
+  --bg-surface: #FFFFFF;
+  --bg-surface-soft: #FFFDF9;
+  --bg-inset: #F4EFEB;
+  --bg-sand: #EFE9E0;
+
+  /* Ink / Typography */
+  --ink-primary: #000000;
+  --ink-secondary: #262626;
+  --ink-muted: #525252;
+  --ink-faint: #8C8C8C;
+
+  /* Borders & Dividers */
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.25);
+  --border-island: rgba(0, 0, 0, 0.16);
+
+  /* Primary Accent: Terracotta Coral / Orange */
+  --accent: #E05D38;
+  --accent-hover: #C84926;
+  --accent-light: #FCEFEA;
+  --accent-glow: rgba(224, 93, 56, 0.25);
+
+  /* Semantic Status Palette (Focused on clean status contrast) */
+  --status-confirmed: #16A34A;
+  --status-confirmed-bg: #DCFCE7;
+  --status-confirmed-border: #86EFAC;
+
+  --status-contradicted: #DC2626;
+  --status-contradicted-bg: #FEE2E2;
+  --status-contradicted-border: #FCA5A5;
+
+  --status-discovered: #D97706;
+  --status-discovered-bg: #FEF3C7;
+  --status-discovered-border: #FCD34D;
+
+  --status-unverified: #6B7280;
+  --status-unverified-bg: #F3F4F6;
+  --status-unverified-border: #D1D5DB;
+
+  --status-active: #E05D38;
+  --status-active-bg: #FCEFEA;
+
+  /* Typography: Plus Jakarta Sans (Headings) + Inter (Body) + IBM Plex Mono (Code) */
+  --font-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 4px 14px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 20px 30px -6px rgba(0, 0, 0, 0.14), 0 10px 15px -6px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 25px -2px var(--accent-glow);
+  --shadow-island: 0 12px 32px -4px rgba(0, 0, 0, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-app);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* Focused Ambient Theme: Warm Orange & Charcoal Glow with Gentle Dynamic Float */
+@keyframes ambientFloatOne {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(-65px, 45px) scale(1.14); }
+  66% { transform: translate(35px, -35px) scale(0.95); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes ambientFloatTwo {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(55px, -45px) scale(1.12); }
+  66% { transform: translate(-45px, 35px) scale(0.92); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes ambientGlowPulse {
+  0%, 100% { transform: translate(-50%, -48%) scale(1); opacity: 0.82; }
+  50% { transform: translate(-50%, -46%) scale(1.10); opacity: 1; }
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -12%;
+  right: -8%;
+  width: 920px;
+  height: 920px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(224, 93, 56, 0.22) 0%, rgba(249, 115, 22, 0.10) 45%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  animation: ambientFloatOne 16s ease-in-out infinite;
+  filter: blur(40px);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -15%;
+  left: -8%;
+  width: 860px;
+  height: 860px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(224, 93, 56, 0.18) 0%, rgba(28, 39, 64, 0.06) 50%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+  animation: ambientFloatTwo 20s ease-in-out infinite;
+  filter: blur(45px);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(17, 24, 39, 0.18);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 24, 39, 0.35);
+}
+
+/* Interactive focus ring */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Interactive hover cards */
+.interactive-card {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+}
+.interactive-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 28px -6px rgba(17, 24, 39, 0.09), 0 8px 12px -4px rgba(17, 24, 39, 0.05);
+  border-color: rgba(224, 93, 56, 0.45) !important;
+}
+
+/* Animations */
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.5; }
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse {
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bottomToastSlide {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.animate-bottom-toast {
+  animation: bottomToastSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Strict Brand Theme Gradients: Orange · Charcoal · Grey · White */
+.text-gradient-brand {
+  background: linear-gradient(135deg, #000000 0%, #E05D38 60%, #F97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-orange {
+  background: linear-gradient(135deg, #E05D38 0%, #C44C27 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-dark-orange {
+  background: linear-gradient(135deg, #000000 0%, #333333 50%, #E05D38 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Glassmorphic card styling inspired by modern minimal UI */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.2px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-panel:hover {
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.1);
+  border-color: rgba(224, 93, 56, 0.35);
+}
+
+/* 3D Flip Card Styles */
+.flip-card-wrapper {
+  perspective: 1200px;
+  position: relative;
+  width: 100%;
+}
+
+.flip-card-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%);
+  width: 125%;
+  height: 125%;
+  background: radial-gradient(circle closest-side, rgba(224, 93, 56, 0.42) 0%, rgba(249, 115, 22, 0.20) 45%, transparent 75%);
+  filter: blur(40px);
+  border-radius: 50%;
+  z-index: 0;
+  pointer-events: none;
+  animation: ambientGlowPulse 6s ease-in-out infinite alternate;
+}
+
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+  z-index: 1;
+}
+
+.flip-card-wrapper:hover .flip-card-inner,
+.flip-card-wrapper.flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.flip-card-front {
+  transform: rotateY(0deg);
+}
+
+.flip-card-back {
+  transform: rotateY(180deg);
+}

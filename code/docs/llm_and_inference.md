@@ -29,6 +29,8 @@ change, and later phases (judge, test generator) reuse the same wrapper.
 Input: scan.json (from the scanner), the repo folder, and the rule-based V0.
 
 1. The call graph also adds the helper functions each part calls (up to 4) and a ‘Reaches tools’ line for steps.
+1b. context_files adds a short BACKGROUND block (README, docs, configs, redacted) before the code
+    parts. It helps the LLM read the code and is never accepted as evidence (decision 45).
 2. build_parts: the code the LLM may talk about. A part is a tool (labelled tool:name) or a
    workflow step (labelled step:name), made of the graph node function plus its router
    function. Function spans are found with ast, because the scan only records where a node

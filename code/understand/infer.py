@@ -17,7 +17,7 @@ import json
 import re
 from pathlib import Path
 
-from understand import callgraph, llm
+from understand import callgraph, llm, context_files
 from understand.confidence import baseline_confidence
 from understand.model_store import ModelError, validate_entry
 
@@ -142,8 +142,12 @@ def _snippet(repo_root, span):
     return "\n".join(f"{span['start'] + i}: {line}" for i, line in enumerate(chunk))
 
 
-def build_prompts(parts, repo_root):
-    """One or more prompts. Parts are batched so a large repo does not overflow the model."""
+def build_prompts(parts, repo_root, context=""):
+    """One or more prompts. Parts are batched so a large repo does not overflow the model.
+
+    `context` is the background block from context_files.render_context. It goes before the
+    parts in every prompt and is empty when the repo has no docs or configs.
+    """
     texts = []
     for label, part in parts.items():
         body = "\n".join(
@@ -160,7 +164,7 @@ def build_prompts(parts, repo_root):
         size += len(text)
     if current:
         batches.append(current)
-    return [INSTRUCTIONS + "\n\n".join(batch) for batch in batches]
+    return [INSTRUCTIONS + context + "\n\n".join(batch) for batch in batches]
 
 
 # ---------------------------------------------------------------- checking a proposal
@@ -322,9 +326,12 @@ def apply_inference(store, scan, reply, repo_root=None, parts=None):
 def infer_v0(scan, repo_root, store, graph=None):
     """Ask the LLM about every part of the agent and merge what survives the checks."""
     parts = build_parts(scan, repo_root, graph)
-    prompts = build_prompts(parts, repo_root)
+    entries = scan.get("context_files", [])
+    context = context_files.render_context(repo_root, entries)
+    prompts = build_prompts(parts, repo_root, context)
     total = {"capabilities_agreed": 0, "steps_agreed": 0, "constraints_added": 0,
-             "constraints_rejected": [], "batches": len(prompts), "batches_failed": 0}
+             "constraints_rejected": [], "batches": len(prompts), "batches_failed": 0,
+             "context_files": len(entries)}
     last_error = None
     for prompt in prompts:
         for _ in range(ATTEMPTS):
