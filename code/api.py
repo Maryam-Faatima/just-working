@@ -7,7 +7,6 @@ and inspect all generated outputs (spec, rubric, scan, callgraph, model).
 """
 import json
 import logging
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import run_pipeline
-from understand.outputs import agent_name
+from understand.outputs import agent_name, safe_name
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("greattest-api")
@@ -29,10 +28,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,21 +38,16 @@ OUTPUTS_DIR = BASE_DIR / "outputs"
 UPLOADS_DIR = BASE_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 ACTIVE_RUNS: dict[str, dict[str, Any]] = {}
 
 
-class Phase0Answers(BaseModel):
-    purpose: str
-    out_of_scope: list[str] | None = []
-    failure_definition: str | None = ""
-    capabilities: list[str] | None = []
-    rules: list[dict[str, Any]] | None = []
-    ambiguity_policy: str | None = "ask"
-    weak_spots: list[str] | None = []
-    user_behaviors: list[str] | None = []
-    quality: dict[str, Any] | None = None
-    report: dict[str, Any] | None = None
-    run_config: dict[str, Any] | None = None
+def _agent_dir(name: str) -> Path:
+    """Outputs folder of one agent. The name is cleaned so it cannot leave outputs/."""
+    folder = (OUTPUTS_DIR / safe_name(name)).resolve()
+    if folder.parent != OUTPUTS_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Bad agent name.")
+    return folder
 
 
 class RunRequest(BaseModel):
@@ -62,7 +55,7 @@ class RunRequest(BaseModel):
     name: str | None = None
     use_llm: bool = False
     reuse_saved_spec: bool = True
-    spec: Phase0Answers | None = None
+    spec: dict[str, Any] | None = None  # validated by phase0.load_spec, the one source of truth
 
 
 @app.get("/api/health")
@@ -106,7 +99,8 @@ def list_agents():
 @app.get("/api/check-spec")
 def check_spec_exists(name: str):
     """Check if Phase 0 answers already exist for this agent name to enable reuse."""
-    spec_file = OUTPUTS_DIR / name / "spec.json"
+    agent_dir = _agent_dir(name)
+    spec_file = agent_dir / "spec.json"
     if spec_file.exists():
         try:
             saved = json.loads(spec_file.read_text(encoding="utf-8"))
@@ -130,7 +124,7 @@ def _execute_run(source: str, name: str, use_llm: bool, spec_data: dict[str, Any
         "error": None,
     }
 
-    agent_out = OUTPUTS_DIR / name
+    agent_out = _agent_dir(name)
     agent_out.mkdir(parents=True, exist_ok=True)
     saved_spec_file = agent_out / "spec.json"
 
@@ -175,7 +169,7 @@ def _execute_run(source: str, name: str, use_llm: bool, spec_data: dict[str, Any
 @app.post("/api/run")
 def trigger_run(payload: RunRequest, background_tasks: BackgroundTasks):
     source = payload.source.strip()
-    name = payload.name or agent_name(source)
+    name = safe_name(payload.name) if payload.name else agent_name(source)
 
     source_path = Path(source)
     if not source_path.is_absolute() and not source.startswith("http"):
@@ -190,7 +184,7 @@ def trigger_run(payload: RunRequest, background_tasks: BackgroundTasks):
             "message": f"Run for {name} is already in progress.",
         }
 
-    spec_dict = payload.spec.model_dump(exclude_unset=True) if payload.spec else None
+    spec_dict = payload.spec
 
     background_tasks.add_task(
         _execute_run,
@@ -209,15 +203,22 @@ def trigger_run(payload: RunRequest, background_tasks: BackgroundTasks):
 
 @app.post("/api/upload")
 async def upload_agent_file(file: UploadFile = File(...)):
-    """Upload a .zip or archive containing an agent."""
-    temp_path = UPLOADS_DIR / file.filename
-    with temp_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {
-        "status": "uploaded",
-        "filename": file.filename,
-        "path": str(temp_path),
-    }
+    """Upload a .zip containing an agent."""
+    filename = Path(file.filename or "").name  # drops any folder part
+    if not filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
+    target = UPLOADS_DIR / filename
+    written = 0
+    with target.open("wb") as buffer:
+        while chunk := await file.read(1024 * 1024):
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                break
+            buffer.write(chunk)
+    if written > MAX_UPLOAD_BYTES:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=413, detail="File is too large.")
+    return {"status": "uploaded", "filename": filename, "path": str(target)}
 
 
 @app.get("/api/status/{name}")
@@ -225,7 +226,7 @@ def get_status(name: str):
     if name in ACTIVE_RUNS:
         return ACTIVE_RUNS[name]
 
-    agent_dir = OUTPUTS_DIR / name
+    agent_dir = _agent_dir(name)
     summary_path = agent_dir / "run_summary.json"
     if summary_path.exists():
         try:
@@ -246,7 +247,8 @@ def get_status(name: str):
 
 @app.get("/api/summary/{name}")
 def get_summary(name: str):
-    file_path = OUTPUTS_DIR / name / "run_summary.json"
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "run_summary.json"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Summary for agent '{name}' not found.")
     try:
@@ -257,7 +259,8 @@ def get_summary(name: str):
 
 @app.get("/api/spec/{name}")
 def get_spec(name: str):
-    file_path = OUTPUTS_DIR / name / "spec.json"
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "spec.json"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Spec for agent '{name}' not found.")
     try:
@@ -268,7 +271,8 @@ def get_spec(name: str):
 
 @app.get("/api/rubric/{name}")
 def get_rubric(name: str):
-    file_path = OUTPUTS_DIR / name / "rubric.json"
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "rubric.json"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Rubric for agent '{name}' not found.")
     try:
@@ -279,7 +283,8 @@ def get_rubric(name: str):
 
 @app.get("/api/scan/{name}")
 def get_scan(name: str):
-    file_path = OUTPUTS_DIR / name / "scan.json"
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "scan.json"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Scan for agent '{name}' not found.")
     try:
@@ -290,7 +295,8 @@ def get_scan(name: str):
 
 @app.get("/api/callgraph/{name}")
 def get_callgraph(name: str):
-    file_path = OUTPUTS_DIR / name / "callgraph.json"
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "callgraph.json"
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Callgraph for agent '{name}' not found.")
     try:
@@ -301,7 +307,7 @@ def get_callgraph(name: str):
 
 @app.get("/api/model/{name}")
 def get_model(name: str):
-    agent_dir = OUTPUTS_DIR / name
+    agent_dir = _agent_dir(name)
     for candidate in ["model_v0.json", "model_v0_rule.json"]:
         file_path = agent_dir / candidate
         if file_path.exists():

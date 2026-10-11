@@ -54,6 +54,27 @@ export function WorkspaceView({
         >
           <span>←</span> Back to Agent Setup & Invariants
         </button>
+
+        {/* Visible Simulation Banner */}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: '#FEF3C7',
+          border: '1.5px solid #F59E0B',
+          color: '#92400E',
+          padding: '6px 14px',
+          borderRadius: 'var(--radius-full)',
+          fontSize: '12px',
+          fontWeight: 700,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+        }}>
+          <span style={{ fontSize: '14px' }}>⚠️</span>
+          <span>SIMULATION (mock data)</span>
+          <span style={{ fontWeight: 500, opacity: 0.85, fontSize: '11px' }}>
+            — Static interactive demonstration until testing/ trace generator connects
+          </span>
+        </div>
       </div>
 
       {/* 3-Panel Bento Grid */}

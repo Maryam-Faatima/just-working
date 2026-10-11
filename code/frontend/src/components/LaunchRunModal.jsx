@@ -297,7 +297,7 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
           </div>
 
           {/* Name & LLM Checkbox */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
                 Agent Name
@@ -318,14 +318,28 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
               />
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', paddingTop: '20px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 600 }}>
+            <div style={{
+              background: useLlm ? 'var(--accent-light, #FFF2ED)' : 'var(--bg-surface-soft)',
+              border: useLlm ? '1.5px solid var(--accent)' : '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 14px',
+              transition: 'all 0.15s ease'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: useLlm ? 'var(--accent)' : 'var(--ink-primary)' }}>
+                    ✨ LLM Reasoning & Constraints
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-muted)', marginTop: '2px' }}>
+                    {useLlm ? 'Active: Generates rich behavioral constraints via Gemini/Groq' : 'Off: Rule-only AST synthesis (no API keys required)'}
+                  </div>
+                </div>
                 <input
                   type="checkbox"
                   checked={useLlm}
                   onChange={(e) => setUseLlm(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent)' }}
                 />
-                Enable LLM Inference (Gemini/Groq)
               </label>
             </div>
           </div>

@@ -86,6 +86,18 @@ export function TestQueueBar({ testQueue, metrics, onInspectTest }) {
           }}>
             {metrics?.testsExecuted ?? 0} / {metrics?.testsTotal || testQueue.length || 5} Ran
           </span>
+          <span style={{
+            fontSize: '10px',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 800,
+            color: '#92400E',
+            background: '#FEF3C7',
+            border: '1px solid #F59E0B',
+            padding: '2px 7px',
+            borderRadius: '4px'
+          }}>
+            SIMULATION (mock data)
+          </span>
         </div>
 
         <div style={{ height: '18px', width: '1px', background: 'var(--border-default)', flexShrink: 0 }} />

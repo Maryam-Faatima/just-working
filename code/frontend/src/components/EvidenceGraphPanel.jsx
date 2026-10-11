@@ -40,9 +40,14 @@ export function EvidenceGraphPanel() {
             Evidence Graph
           </h2>
         </div>
-        <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', background: 'var(--bg-inset)', padding: '2px 6px', borderRadius: '4px' }}>
-          AST & RUNTIME GRAPH
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#92400E', background: '#FEF3C7', border: '1px solid #F59E0B', padding: '2px 7px', borderRadius: '4px' }}>
+            SIMULATION (mock data)
+          </span>
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', background: 'var(--bg-inset)', padding: '2px 6px', borderRadius: '4px' }}>
+            AST & RUNTIME GRAPH
+          </span>
+        </div>
       </div>
 
       <p style={{ fontSize: '11px', color: 'var(--ink-muted)', marginBottom: '14px' }}>

@@ -17,7 +17,7 @@ export function useSimulation() {
   // Backend connection state
   const [backendConnected, setBackendConnected] = useState(false);
   const [availableAgents, setAvailableAgents] = useState([]);
-  const [selectedAgent, setSelectedAgent] = useState('booking_agent');
+  const [selectedAgent, setSelectedAgent] = useState('');
   const backendModelRef = useRef(null);
 
   // Platform state
@@ -27,13 +27,13 @@ export function useSimulation() {
   const [conversationTurns, setConversationTurns] = useState([]);
   const [assertionResult, setAssertionResult] = useState(null);
   const [activeLoopStep, setActiveLoopStep] = useState('analyze');
-  const [narration, setNarration] = useState('Platform ready. Launch live test suite to verify agent invariants.');
+  const [narration, setNarration] = useState('Simulation mode. Ready to demonstrate persona-driven invariant testing.');
   const [activeGraphNodes, setActiveGraphNodes] = useState([]); // indices
   const [activeGraphEdges, setActiveGraphEdges] = useState([]); // indices
   const [graphNodeTones, setGraphNodeTones] = useState({}); // idx -> tone string
   const [activityLogs, setActivityLogs] = useState([
-    { timestamp: '12:00:00', message: 'Target repository loaded: ./agents/booking_agent/' },
-    { timestamp: '12:00:01', message: 'AST parser ready. Framework: LangChain (Python)' }
+    { timestamp: new Date().toLocaleTimeString(), message: 'Simulation initialized: mock testbed ready.' },
+    { timestamp: new Date().toLocaleTimeString(), message: 'AST parser ready. Framework: LangGraph (Python)' }
   ]);
 
   const [metrics, setMetrics] = useState({
@@ -108,7 +108,7 @@ export function useSimulation() {
     }
   }, [loadBackendAgent]);
 
-  // Check health and load initial agent on mount
+  // Check health on mount
   useEffect(() => {
     checkBackendHealth().then(res => {
       if (res.connected) {
@@ -117,8 +117,13 @@ export function useSimulation() {
           ...logs,
           { timestamp: new Date().toLocaleTimeString(), message: 'Connected to GreatTest API (http://127.0.0.1:8000).' }
         ]);
-        fetchAgents().then(agents => setAvailableAgents(agents));
-        loadBackendAgent('booking_agent');
+        fetchAgents().then(agents => {
+          setAvailableAgents(agents);
+          if (agents.length > 0) {
+            setSelectedAgent(agents[0].name);
+            loadBackendAgent(agents[0].name);
+          }
+        });
       }
     });
   }, [loadBackendAgent]);
@@ -158,7 +163,7 @@ export function useSimulation() {
         ]);
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:05', message: 'Synthesized 4 test specifications with persona profiles.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'Synthesized 4 test specifications with persona profiles.' }
         ]);
         break;
       }
@@ -182,7 +187,7 @@ export function useSimulation() {
         setMetrics(m => ({ ...m, coveragePct: 50, testsExecuted: 1 }));
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:08', message: 'TC-001 passed.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'TC-001 passed.' }
         ]);
         break;
       }
@@ -205,7 +210,7 @@ export function useSimulation() {
         setMetrics(m => ({ ...m, coveragePct: 75, testsExecuted: 2 }));
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:11', message: 'TC-002 passed. Boundary parameter validated.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'TC-002 passed. Boundary parameter validated.' }
         ]);
         break;
       }
@@ -229,7 +234,7 @@ export function useSimulation() {
         setMetrics(m => ({ ...m, testsExecuted: 3 }));
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:14', message: 'TC-003 nominal lookup passed.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'TC-003 nominal lookup passed.' }
         ]);
         break;
       }
@@ -240,7 +245,7 @@ export function useSimulation() {
         setActiveLoopStep('generate');
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:16', message: 'Targeting TC-004: Adversarial persona to probe confirmation enforcement.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'Targeting TC-004: Adversarial persona to probe confirmation enforcement.' }
         ]);
         break;
       }
@@ -266,7 +271,7 @@ export function useSimulation() {
         setMetrics(m => ({ ...m, contradictions: 1, testsExecuted: 4, coveragePct: 100 }));
         setActivityLogs(logs => [
           ...logs,
-          { timestamp: '12:00:20', message: 'Invariant check failed: cancel_booking invoked without confirmation.' }
+          { timestamp: new Date().toLocaleTimeString(), message: 'Invariant check failed: cancel_booking invoked without confirmation.' }
         ]);
         break;
       }

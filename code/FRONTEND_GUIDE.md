@@ -33,7 +33,7 @@ GreatTest includes a modern React web interface that interfaces directly with th
 
 ## Prerequisites
 
-1. **Python 3.10+** with GreatTest dependencies installed in the virtual environment.
+1. **Python 3.12+** with GreatTest dependencies installed in the virtual environment.
 2. **Node.js (v18+) & npm**.
 
 ---

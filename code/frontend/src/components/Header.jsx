@@ -67,7 +67,7 @@ export function Header({
             GreatTest<span style={{ color: 'var(--accent)' }}>.</span>
           </div>
 
-          {currentAgent && (
+          {currentAgent ? (
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -80,6 +80,20 @@ export function Header({
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-confirmed)' }} />
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-primary)' }}>
                 {currentAgent}
+              </span>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#FEF3C7',
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-full)',
+              border: '1px solid #F59E0B'
+            }}>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#92400E' }}>
+                SIMULATION (mock data)
               </span>
             </div>
           )}

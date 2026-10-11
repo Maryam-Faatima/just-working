@@ -4,7 +4,7 @@ export function SpecView({
   onProceedToTesting,
   onBackToLanding,
   availableAgents = [],
-  selectedAgent = 'booking_agent',
+  selectedAgent = '',
   onSelectAgent,
   onRescan
 }) {
