@@ -64,7 +64,7 @@ with st.sidebar:
     dep = d1.date_input("Departure", value=None, format="DD/MM/YYYY")
     ret = d2.date_input("Return", value=None, format="DD/MM/YYYY")
     t1, t2 = st.columns(2)
-    travelers = t1.selectbox("Travellers", ["Auto"] + list(range(1, 10)))
+    travelers = t1.selectbox("Travellers", ["Auto", *list(range(1, 10))])
     currency = t2.selectbox("Currency", ["Auto", "USD", "AED", "PKR", "EUR", "GBP", "QAR", "MYR"])
     budget = st.number_input("Budget", min_value=0.0, step=100.0, value=0.0, help="Leave at 0 to use the budget in your message.")
     prefs = st.text_input("Preferences", placeholder="e.g. no early flights, direct only")

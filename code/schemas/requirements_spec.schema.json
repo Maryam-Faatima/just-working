@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RequirementsSpec",
+  "type": "object",
+  "required": ["purpose"],
+  "properties": {
+    "agent": { "type": "string", "minLength": 1 },
+    "purpose": { "type": "string", "minLength": 5 },
+    "out_of_scope": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "failure_definition": { "type": "string" },
+    "capabilities": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+    "ambiguity_policy": { "enum": ["ask", "assume", "refuse"] },
+    "weak_spots": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "user_behaviors": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "external_services": { "type": "array", "items": { "$ref": "#/$defs/service" } },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "notes": { "type": "string" },
+        "pass_threshold": { "$ref": "#/$defs/threshold" }
+      },
+      "additionalProperties": false
+    },
+    "reference_material": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "report": {
+      "type": "object",
+      "properties": {
+        "audience": { "enum": ["developer", "qa", "manager"] },
+        "emphasis": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "run_config": {
+      "type": "object",
+      "properties": {
+        "entry_point": { "type": "string", "minLength": 1 },
+        "interface": { "enum": ["python_module", "http"] },
+        "repeats": { "type": "integer", "minimum": 1, "maximum": 20 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "required": ["text", "kind", "severity"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^R[0-9]+$" },
+        "text": { "type": "string", "minLength": 5 },
+        "kind": { "enum": ["must_always", "must_never", "ordering"] },
+        "severity": { "enum": ["critical", "major", "minor"] },
+        "applies_to": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "check": { "enum": ["deterministic", "judge"] }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "unsafe_to_hit": { "type": "boolean" },
+        "mock": { "enum": ["none", "developer", "generate"] },
+        "failure_modes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "threshold": {
+      "type": "object",
+      "properties": {
+        "max_critical_failures": { "type": "integer", "minimum": 0 },
+        "min_pass_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

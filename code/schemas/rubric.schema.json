@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rubric",
+  "type": "object",
+  "required": ["agent", "version", "pass_threshold", "items"],
+  "properties": {
+    "agent": { "type": "string", "minLength": 1 },
+    "version": { "type": "string" },
+    "purpose": { "type": "string" },
+    "failure_definition": { "type": "string" },
+    "pass_threshold": {
+      "type": "object",
+      "properties": {
+        "max_critical_failures": { "type": "integer", "minimum": 0 },
+        "min_pass_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "description", "kind", "severity", "check", "source"],
+        "properties": {
+          "rule_id": { "type": "string", "pattern": "^[RU][0-9]+$" },
+          "description": { "type": "string" },
+          "kind": { "enum": ["must_always", "must_never", "ordering"] },
+          "severity": { "enum": ["critical", "major", "minor"] },
+          "check": { "enum": ["deterministic", "judge"] },
+          "source": { "enum": ["developer", "default"] },
+          "target_id": { "type": "string", "pattern": "^con_[0-9]{3}$" },
+          "applies_to": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

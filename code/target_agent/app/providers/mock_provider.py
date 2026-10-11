@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta, UTC
 from functools import lru_cache
 from pathlib import Path
 
@@ -52,7 +52,7 @@ class MockTravelData(FlightProvider, HotelProvider, WeatherProvider, ExchangeRat
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
     # ---------- flights ----------
     def search_flights(self, origin, destination, departure_date, return_date, passengers):

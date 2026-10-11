@@ -1,10 +1,10 @@
 """Tool permission policy. Enforced in code by the registry and executor, not by prompts."""
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Permission(str, Enum):
+class Permission(StrEnum):
     READ_ONLY = "READ_ONLY"
     SIMULATED_WRITE = "SIMULATED_WRITE"
     REAL_WRITE = "REAL_WRITE"  # declared so it can be rejected; never allowed

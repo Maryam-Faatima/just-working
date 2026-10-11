@@ -3,3 +3,7 @@ target-version = "py312"
 
 [lint]
 select = ["E4", "E7", "E9", "F", "UP", "SIM", "RUF", "BLE", "DTZ", "FURB"]
+
+[lint.per-file-ignores]
+"target_agent/frontend/streamlit_app.py" = ["E402"]  # sys.path is set before the app imports
+"target_agent/tests/conftest.py" = ["E402"]          # same reason

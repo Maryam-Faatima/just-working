@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+import contextlib
 
 _TRAILING = re.compile(r"\s+(?:for|on|in|during|with|and|by|around|next|this|at)\b.*$")
 MONTHS = {m: i for i, m in enumerate(
@@ -39,10 +40,8 @@ def _next_occurrence(month: int, day: int, today: date) -> date | None:
 def find_dates(text: str, today: date) -> list[date]:
     found: list[tuple[int, date]] = []
     for m in re.finditer(r"\b(\d{4})-(\d{2})-(\d{2})\b", text):
-        try:
+        with contextlib.suppress(ValueError):
             found.append((m.start(), date(int(m[1]), int(m[2]), int(m[3]))))
-        except ValueError:
-            pass
     for m in re.finditer(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?{MONTH_RE}\b(?:,?\s+(\d{{4}}))?", text, re.IGNORECASE):
         month = MONTHS[m[2].lower()[:4] if m[2].lower().startswith("sept") else m[2].lower()[:3]]
         d = _safe_date(int(m[3]), month, int(m[1])) if m[3] else _next_occurrence(month, int(m[1]), today)

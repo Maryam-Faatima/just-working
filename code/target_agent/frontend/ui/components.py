@@ -28,7 +28,7 @@ from frontend.ui.styles import (
 
 e = html.escape
 KIND_ICON = {"flight": "✈", "transfer": "🚕", "hotel": "🏨", "attraction": "📍", "meal": "🍽", "free": "☀"}
-STAMP = {"success": ("✓", CLEAR), "failure": ("✗", SIGNAL), "retrying": ("↻", AMBER), "skipped": ("–", SLATE),
+STAMP = {"success": ("✓", CLEAR), "failure": ("✗", SIGNAL), "retrying": ("↻", AMBER), "skipped": ("–", SLATE),  # noqa: RUF001
          "info": ("i", HORIZON)}
 
 

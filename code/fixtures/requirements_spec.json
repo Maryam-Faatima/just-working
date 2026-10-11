@@ -1,0 +1,45 @@
+{
+  "agent": "booking_agent",
+  "purpose": "Help customers search availability, book rooms and cancel bookings.",
+  "out_of_scope": ["Flight bookings", "Legal or medical advice"],
+  "failure_definition": "The agent changes a booking without the user's explicit confirmation.",
+  "capabilities": ["search_availability", "book_room", "cancel_booking"],
+  "rules": [
+    {
+      "text": "Must ask the user to confirm before cancelling a booking",
+      "kind": "must_always",
+      "severity": "critical",
+      "applies_to": ["cancel_booking"],
+      "check": "deterministic"
+    },
+    {
+      "text": "Must search availability before booking a room",
+      "kind": "ordering",
+      "severity": "major",
+      "applies_to": ["search_availability", "book_room"],
+      "check": "deterministic"
+    },
+    {
+      "text": "Never reveal another customer's booking details",
+      "kind": "must_never",
+      "severity": "critical"
+    }
+  ],
+  "ambiguity_policy": "ask",
+  "weak_spots": ["Relative dates such as 'next Friday'"],
+  "user_behaviors": ["impatient", "changes their mind mid-booking"],
+  "external_services": [
+    {
+      "name": "payment_gateway",
+      "unsafe_to_hit": true,
+      "mock": "developer",
+      "failure_modes": ["timeout", "error"]
+    }
+  ],
+  "quality": {
+    "notes": "Replies should be short and polite.",
+    "pass_threshold": { "max_critical_failures": 0, "min_pass_rate": 0.95 }
+  },
+  "report": { "audience": "developer", "emphasis": ["failures by severity", "reproducibility"] },
+  "run_config": { "entry_point": "booking_agent.py", "interface": "python_module", "repeats": 3 }
+}

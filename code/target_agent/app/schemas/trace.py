@@ -1,7 +1,7 @@
 """Trace and tool result models. ToolResult is what the agent sees; TraceEvent is what researchers see."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -36,7 +36,7 @@ class ToolResult(BaseModel):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TraceEvent(BaseModel):

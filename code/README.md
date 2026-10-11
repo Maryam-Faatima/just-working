@@ -20,3 +20,7 @@ Early development (FYP-1).
 | `evidence/` | Phase 3 — evidence graph, report, API/CLI |
 | `tests/` | Unit tests |
 | `docs/` | `decisions.md`, diagrams, action register |
+
+## Documentation
+- docs/schemas.md: data contracts between modules and why they are shaped this way
+- docs/decisions.md: log of design decisions with reasons

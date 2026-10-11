@@ -52,8 +52,9 @@ def main() -> int:
             (args.export / f"{rec.run_id}.json").write_text(json.dumps(rec.to_greattest(), indent=2, default=str))
 
     header = ("Run", "ID", "Scenario", "Failures", "Retries", "Recovery", "Actual", "Expected", "Match")
-    widths = [max(len(str(r[i])) for r in rows + [header]) for i in range(len(header))]
-    line = lambda r: " | ".join(str(v).ljust(w) for v, w in zip(r, widths))
+    widths = [max(len(str(r[i])) for r in [*rows, header]) for i in range(len(header))]
+    def line(r):
+        return " | ".join(str(v).ljust(w) for v, w in zip(r, widths))
     print(line(header))
     print("-+-".join("-" * w for w in widths))
     for r in rows:

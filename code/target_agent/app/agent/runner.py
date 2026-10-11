@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 from uuid import uuid4
 
@@ -45,7 +45,7 @@ def get_graph():
 
 
 def new_run_id() -> str:
-    return f"run-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
+    return f"run-{datetime.now(UTC):%Y%m%d-%H%M%S}-{uuid4().hex[:6]}"
 
 
 class AgentRunner:
@@ -121,7 +121,7 @@ class AgentRunner:
                            "partial" if status == "completed_with_warnings" else "failed")
         final_dump = redact(state.model_dump(mode="json", exclude={"tool_trace", "last_tool_result"}))
         return RunRecord(
-            run_id=run_id, agent_version=self.settings.agent_version, created_at=datetime.now(timezone.utc),
+            run_id=run_id, agent_version=self.settings.agent_version, created_at=datetime.now(UTC),
             llm_provider=self.settings.llm_provider, model=self.settings.active_model, data_mode=self.settings.data_mode,
             scenario_id=scenario.scenario_id, failure_mode=scenario.key, user_request=request.request_text,
             status=status, final_response=final_response, initial_state=redact(initial_dump), final_state=final_dump,

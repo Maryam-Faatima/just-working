@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 
-class FailureKind(str, Enum):
+class FailureKind(StrEnum):
     NONE = "none"
     TIMEOUT = "timeout"
     EMPTY = "empty"

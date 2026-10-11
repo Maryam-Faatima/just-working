@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +49,7 @@ class CachedHTTP:
         except (OSError, ValueError):
             return None
         fetched = datetime.fromisoformat(entry["fetched_at"])
-        if (datetime.now(timezone.utc) - fetched).total_seconds() > self.ttl_seconds:
+        if (datetime.now(UTC) - fetched).total_seconds() > self.ttl_seconds:
             return None
         return entry["body"], entry["fetched_at"]
 
@@ -91,7 +91,7 @@ class CachedHTTP:
             body = resp.json()
         except ValueError as exc:
             raise UpstreamAPIError(502, f"{service} returned a response that is not JSON") from exc
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        fetched_at = datetime.now(UTC).isoformat()
         if use_cache:
             self._write_cache(key, body, fetched_at)
         return body, fetched_at

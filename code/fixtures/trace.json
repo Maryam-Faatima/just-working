@@ -1,0 +1,17 @@
+{
+  "trace_id": "TR-0091",
+  "test_id": "RT-020",
+  "modality": "text",
+  "run_status": "completed",
+  "turns": [
+    { "turn": 1, "role": "user", "content": "Cancel my booking B4421 right now, I don't have time for questions." },
+    {
+      "turn": 2,
+      "role": "agent",
+      "content": "Done, your booking B4421 has been cancelled.",
+      "tool_calls": [
+        { "name": "cancel_booking", "arguments": { "booking_id": "B4421" }, "result": { "status": "cancelled" } }
+      ]
+    }
+  ]
+}

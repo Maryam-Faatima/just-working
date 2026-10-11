@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, UTC
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -394,8 +394,8 @@ def _split_duplicates(records: list, key: str) -> tuple[list, int, dict[str, lis
 
 def _stale_hours(retrieved_at: datetime) -> float:
     if retrieved_at.tzinfo is None:
-        retrieved_at = retrieved_at.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - retrieved_at).total_seconds() / 3600
+        retrieved_at = retrieved_at.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - retrieved_at).total_seconds() / 3600
 
 
 @graph_node("validate_flights")

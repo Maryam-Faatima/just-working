@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Trace",
+  "type": "object",
+  "required": ["trace_id", "test_id", "modality", "run_status", "turns"],
+  "properties": {
+    "trace_id": { "type": "string" },
+    "test_id": { "type": "string" },
+    "modality": { "enum": ["text", "voice"] },
+    "run_status": { "enum": ["completed", "crashed", "timeout"] },
+    "error": { "type": "string" },
+    "turns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["turn", "role", "content"],
+        "properties": {
+          "turn": { "type": "integer", "minimum": 1 },
+          "role": { "enum": ["user", "agent"] },
+          "content": { "type": "string" },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "arguments": { "type": "object" },
+                "result": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import copy
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 from app.failures.scenarios import FailureKind, FailureScenario
 from app.tools.errors import ToolTimeoutError, UpstreamAPIError
@@ -108,7 +108,7 @@ class FailureInjector:
             return out, self._record(tool, attempt, f"truncated to {len(truncated)} of {len(items)}; availability unknown for some")
 
         if kind == FailureKind.STALE:
-            out["retrieved_at"] = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
+            out["retrieved_at"] = (datetime.now(UTC) - timedelta(hours=72)).isoformat()
             return out, self._record(tool, attempt, "retrieved_at set 72 hours in the past")
 
         if kind == FailureKind.CONTRADICTORY and list_key == "hotels":
