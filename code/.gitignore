@@ -7,7 +7,3 @@ venv/
 .vscode/
 *.log
 .pytest_cache/
-outputs/
-out.json
-repos/
-.coverage
