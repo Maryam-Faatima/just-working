@@ -302,7 +302,7 @@ def fake_git_clone():
         calls.append(cmd)
         if cmd[1] == "clone":
             dest = Path(cmd[-1])
-            dest.mkdir(parents=True)
+            (dest / ".git").mkdir(parents=True)
             (dest / "agent.py").write_text(AGENT, encoding="utf-8")
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return subprocess.CompletedProcess(cmd, 0, "abc123\n", "")
@@ -325,3 +325,9 @@ def test_git_url_is_cloned_into_repos_and_replaced_on_every_run(tmp_path, monkey
     assert any("Replacing" in line for line in second_lines)
     assert len([c for c in calls if c[1] == "clone"]) == 2  # cloned again, not reused
     assert statuses(first)["scan"] == "ok" and statuses(second)["scan"] == "ok"
+
+def test_user_supplied_name_is_made_safe_as_a_folder_name(repo, tmp_path):
+    summary, _ = run(repo, tmp_path, use_llm=False, name="../../evil name")
+    assert summary["agent"] == "evil-name"
+    assert (tmp_path / "out" / "evil-name" / "run_summary.json").exists()
+    assert not (tmp_path.parent / "evil name").exists()

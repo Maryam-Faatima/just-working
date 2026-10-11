@@ -74,3 +74,12 @@ def test_outputs_are_written_into_a_folder_named_after_the_agent(scan, tmp_path)
     assert json.loads((folder / "scan.json").read_text(encoding="utf-8"))["agent"] == "demo"
     assert (folder / "scan.md").read_text(encoding="utf-8").startswith("# Scan report: demo")
     assert (folder / "scan.html").read_text(encoding="utf-8").startswith("<!doctype html>")
+
+@pytest.mark.parametrize("raw, expected", [
+    ("..", "agent"), (".", "agent"), ("", "agent"), ("/etc", "etc"), ("../notes", "notes"),
+    ("C:\\Users\\me", "C-Users-me"), ("my agent", "my-agent"), ("ok-name_1.2", "ok-name_1.2"),
+])
+def test_safe_name_never_contains_a_path_separator_or_leading_dot(raw, expected):
+    from understand.outputs import safe_name
+
+    assert safe_name(raw) == expected

@@ -10,4 +10,4 @@ venv/
 outputs/
 out.json
 repos/
-
+.coverage

@@ -9,6 +9,9 @@ from understand.html_report import render_html
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "outputs"
 SPECIAL_NODES = {"START", "END", "__start__", "__end__"}
 
+def safe_name(name):
+    """A name that is safe as a single folder name: no separators, no dots at the ends."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", str(name)).strip("-.") or "agent"
 
 def agent_name(source):
     """Folder-safe agent name taken from a git URL, a zip file or a folder."""
@@ -17,7 +20,7 @@ def agent_name(source):
     else:
         path = Path(source).resolve()
         name = path.stem if path.suffix.lower() == ".zip" else path.name
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.") or "agent"
+    return safe_name(name)
 
 
 def _cell(text):

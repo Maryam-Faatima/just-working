@@ -142,6 +142,10 @@ def _fresh_clone(url, dest):
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and not (dest / ".git").exists():
+        raise AcquireError(
+            f"{dest} already exists and is not a clone made by GreatTest (no .git folder inside). "
+            "It was not touched. Move it away, or choose another --name.")
     staging = dest.with_name(dest.name + ".new")
     if staging.exists():
         _remove_tree(staging)
@@ -170,7 +174,10 @@ def open_source(source, clone_dir=None, name=None):
             with _workspace(lambda dest: clone_repo(str(source), dest)) as root:
                 yield root
         else:
-            dest = Path(clone_dir) / (name or _name_from_url(source))
+            base = Path(clone_dir).resolve()
+            dest = base / (name or _name_from_url(source))
+            if dest.resolve().parent != base:
+                raise AcquireError(f"Unsafe clone folder name: {name!r}")
             _fresh_clone(str(source), dest)
             yield dest
     elif path.is_file() and path.suffix.lower() == ".zip":

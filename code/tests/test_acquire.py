@@ -150,7 +150,7 @@ def fake_git():
         calls.append(cmd)
         if cmd[1] == "clone":
             dest = Path(cmd[-1])
-            dest.mkdir(parents=True)
+            (dest / ".git").mkdir(parents=True)
             (dest / "agent.py").write_text("x = 1\n", encoding="utf-8")
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
@@ -190,7 +190,7 @@ def test_clone_name_defaults_to_the_repo_name(monkeypatch, tmp_path):
 
 def test_existing_clone_is_replaced_by_a_fresh_one(monkeypatch, tmp_path):
     old = tmp_path / "repos" / "repo"
-    old.mkdir(parents=True)
+    (old / ".git").mkdir(parents=True) 
     (old / "stale.py").write_text("old", encoding="utf-8")
     run, calls = fake_git()
     monkeypatch.setattr(acquire.subprocess, "run", run)
@@ -203,7 +203,7 @@ def test_existing_clone_is_replaced_by_a_fresh_one(monkeypatch, tmp_path):
 
 def test_failed_clone_keeps_the_old_one(monkeypatch, tmp_path):
     old = tmp_path / "repos" / "repo"
-    old.mkdir(parents=True)
+    (old / ".git").mkdir(parents=True) 
     (old / "stale.py").write_text("old", encoding="utf-8")
 
     def run(cmd, **kwargs):
@@ -211,6 +211,58 @@ def test_failed_clone_keeps_the_old_one(monkeypatch, tmp_path):
 
     monkeypatch.setattr(acquire.subprocess, "run", run)
     with pytest.raises(AcquireError, match="repository not found"), open_source(
+            URL, clone_dir=tmp_path / "repos", name="repo"):
+        pass
+    assert (old / "stale.py").exists()
+    assert not (tmp_path / "repos" / "repo.new").exists()
+
+@pytest.mark.parametrize("bad_name", ["..", "../outside", "a/b"])
+def test_clone_name_cannot_point_outside_the_clone_folder(monkeypatch, tmp_path, bad_name):
+    run, calls = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    (tmp_path / "keep.txt").write_text("important", encoding="utf-8")
+    with pytest.raises(AcquireError, match="Unsafe clone folder name"), open_source(
+            URL, clone_dir=tmp_path / "repos", name=bad_name):
+        pass
+    assert (tmp_path / "keep.txt").exists() and clones(calls) == []
+
+
+def test_absolute_clone_name_cannot_delete_another_folder(monkeypatch, tmp_path):
+    run, calls = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    victim = tmp_path / "notes"
+    victim.mkdir()
+    (victim / "thesis.txt").write_text("irreplaceable", encoding="utf-8")
+    with pytest.raises(AcquireError, match="Unsafe clone folder name"), open_source(
+            URL, clone_dir=tmp_path / "repos", name=str(victim)):
+        pass
+    assert (victim / "thesis.txt").exists() and clones(calls) == []
+
+
+def test_a_folder_that_is_not_a_clone_is_never_deleted(monkeypatch, tmp_path):
+    run, calls = fake_git()
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    mine = tmp_path / "repos" / "repo"
+    mine.mkdir(parents=True)  # no .git inside: the developer's own folder
+    (mine / "my_work.py").write_text("precious", encoding="utf-8")
+    with pytest.raises(AcquireError, match="not a clone made by GreatTest"), open_source(
+            URL, clone_dir=tmp_path / "repos", name="repo"):
+        pass
+    assert (mine / "my_work.py").exists() and clones(calls) == []
+
+
+def test_half_made_clone_is_cleaned_up_when_cloning_fails(monkeypatch, tmp_path):
+    old = tmp_path / "repos" / "repo"
+    (old / ".git").mkdir(parents=True)
+    (old / "stale.py").write_text("old", encoding="utf-8")
+
+    def run(cmd, **kwargs):
+        Path(cmd[-1]).mkdir(parents=True)  # git got as far as creating the folder, then failed
+        (Path(cmd[-1]) / "partial.py").write_text("half", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 128, "", "fatal: early EOF")
+
+    monkeypatch.setattr(acquire.subprocess, "run", run)
+    with pytest.raises(AcquireError, match="early EOF"), open_source(
             URL, clone_dir=tmp_path / "repos", name="repo"):
         pass
     assert (old / "stale.py").exists()

@@ -53,7 +53,12 @@ from understand.acquire import (
     open_source,
 )
 from understand.model_store import build_v0
-from understand.outputs import DEFAULT_OUTPUT_DIR, agent_name, write_scan_outputs
+from understand.outputs import (
+    DEFAULT_OUTPUT_DIR,
+    agent_name,
+    safe_name,
+    write_scan_outputs,
+)
 from understand.scanner import scan_repo
 
 REQUIRED_STAGES = {"scan", "model"}  # nothing useful can run after these fail
@@ -166,7 +171,7 @@ def run_pipeline(source, name=None, out=None, use_llm=True, log=print, spec_path
     used. The spec is checked first, so a typo in it costs nothing. A git URL is cloned fresh
     into <repos>/<name>, replacing the clone from an earlier run.
     """
-    name = name or agent_name(source)
+    name = safe_name(name) if name else agent_name(source)
     spec = phase0.load_spec(spec_path) if spec_path else None
     ctx = {"source": str(source), "name": name, "out": out, "use_llm": use_llm, "spec": spec}
     clone_dir = Path(repos or DEFAULT_CLONE_DIR)
@@ -226,7 +231,7 @@ def main(argv=None):
     parser.add_argument("--open", action="store_true", help="open the scan report in the browser")
     args = parser.parse_args(argv)
 
-    name = args.name or agent_name(args.source)
+    name = safe_name(args.name) if args.name else agent_name(args.source)
     spec_path = args.spec
     try:
         check_source(args.source)  # a mistyped path should fail before the questions, not after
