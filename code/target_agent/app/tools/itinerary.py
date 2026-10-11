@@ -48,7 +48,9 @@ def build_itinerary(inp: CreateItineraryInput) -> Itinerary:
         if not candidates:
             candidates = [a for a in pool if a.attraction_id not in used and a.best_time != "evening" and slot != "evening"]
         if prefer_indoor:
-            candidates.sort(key=lambda a: (not a.indoor, a.estimated_cost, a.attraction_id))
+            candidates.sort(key=lambda a: (not a.indoor,
+                                           a.estimated_cost if a.estimated_cost is not None else float("inf"),
+                                           a.attraction_id))
         if not candidates:
             return None
         chosen = candidates[0]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from app.clock import today as clock_today
 from app.providers.base import ExchangeRateProvider, WeatherProvider
 from app.providers.live.geo import LiveGeo
 from app.providers.live.http import CachedHTTP
@@ -39,7 +40,7 @@ class LiveWeather(WeatherProvider):
 
     def get_weather(self, destination: str, on_date: date) -> dict:
         city = self.geo.require(destination)
-        days_ahead = (on_date - date.today()).days
+        days_ahead = (on_date - clock_today()).days
         if 0 <= days_ahead <= 15:
             url, query_date, basis = FORECAST_URL, on_date, "forecast"
         else:

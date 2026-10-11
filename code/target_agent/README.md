@@ -89,7 +89,7 @@ app/
   schemas/               travel.py, tools.py (tool I/O), trace.py, run.py
   llm/                   base.py, openai_provider.py, ollama_provider.py,
                          stub_provider.py, factory.py
-  providers/             base.py, mock_provider.py, real_providers.py, factory.py
+  providers/             base.py, mock_provider.py, live/ (http.py, geo.py, serpapi.py, destinations.py, weather_fx.py), factory.py
   safety/                permissions.py, sandbox.py, redaction.py
   failures/              scenarios.py, registry.py, injector.py
   tracing/               tracer.py, logging_config.py
@@ -98,7 +98,7 @@ data/                    flights.json, hotels.json, destinations.json,
                          weather.json, currency.json
 frontend/                streamlit_app.py, ui/components.py, ui/history.py, ui/styles.py
 scripts/                 run_scenario_suite.py
-tests/                   pytest suite (81 tests)
+tests/                   pytest suite (95 tests)
 ```
 
 ## 3. Installation

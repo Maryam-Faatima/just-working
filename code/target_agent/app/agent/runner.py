@@ -138,5 +138,5 @@ class AgentRunner:
                 scenario_id=scenario.scenario_id, failure_mode=scenario.key,
                 expected_behavior=scenario.expected_behavior, expected_outcome=scenario.expected_outcome,
                 actual_outcome=status,
-                matches=(status == scenario.expected_outcome) or (status == "needs_clarification" and scenario.key == "none" and False)),
+                matches=(status == scenario.expected_outcome)),
         )

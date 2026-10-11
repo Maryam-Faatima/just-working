@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import itertools
 import json
 from datetime import date
 
@@ -245,7 +246,7 @@ def graph_view(record: RunRecord) -> None:
         style = "rounded,filled" if st_ else "rounded,dashed"
         lines.append(f'{node} [label="{label}" fillcolor="{fill}" fontcolor="{font}" style="{style}" color="{fill if st_ else MIST}"];')
     visited = [ev["node"] for ev in record.events if ev["event_type"] == "node" and ev["status"] == "started"]
-    taken = set(zip(visited, visited[1:]))
+    taken = set(itertools.pairwise(visited))
     for a, b, cond in GRAPH_EDGES:
         on_path = (a, b) in taken or (a == "START" and b == visited[:1][0] if visited else False) or \
                   (b == "END" and visited and visited[-1] == a)

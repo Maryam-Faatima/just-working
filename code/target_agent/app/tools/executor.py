@@ -90,7 +90,7 @@ class ToolExecutor:
         except UpstreamAPIError as exc:
             injection = injection or getattr(exc, "injection", None)
             result = _err("api_error", str(exc), exc.status_code >= 500 or exc.status_code == 429)
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:  # noqa: BLE001  # pragma: no cover - defensive
             result = _err("internal", f"{tool_name} failed: {type(exc).__name__}", False)
 
         self.tracer.record(TraceEvent(

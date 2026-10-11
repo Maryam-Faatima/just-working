@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.agent.runner import AgentRunner
+from app.clock import today as clock_today
 from app.config import Settings
 from app.failures.injector import FailureInjector
 from app.failures.registry import get_scenario
@@ -19,7 +20,7 @@ from app.tools.executor import ToolExecutor
 from app.tools.travel_tools import build_registry
 from app.tracing.tracer import Tracer
 
-DEPART = date.today() + timedelta(days=40)
+DEPART = clock_today() + timedelta(days=40)
 RETURN = DEPART + timedelta(days=4)
 DEMO_REQUEST = (f"I want to travel from Islamabad to Dubai on {DEPART.isoformat()} for 5 days. My budget is $1500. "
                 "I prefer a comfortable hotel and activities that are not too expensive.")

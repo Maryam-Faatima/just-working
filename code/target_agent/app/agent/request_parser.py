@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
+_TRAILING = re.compile(r"\s+(?:for|on|in|during|with|and|by|around|next|this|at)\b.*$")
 MONTHS = {m: i for i, m in enumerate(
     ["january", "february", "march", "april", "may", "june", "july", "august",
      "september", "october", "november", "december"], start=1)}
@@ -86,9 +87,7 @@ def parse_request(text: str, known_cities: list[str], today: date) -> dict:
     m = re.search(r"\bfrom\s+([a-z][a-z ]{1,30}?)\s+to\s+([a-z][a-z ]{1,30})", low)
     if m:
         result["origin"] = _city(m[1], known_cities) or m[1].strip().title()
-        result["destination"] = _city(m[2], known_cities) or m[2].strip().split("  ")[0].title()
-        if not _city(m[2], known_cities):
-            result["destination"] = m[2].strip().split(" for ")[0].split(" on ")[0].split(" in ")[0].title()
+        result["destination"] = _city(m[2], known_cities) or _TRAILING.sub("", m[2].strip()).title()
     else:
         # "Islamabad to Dubai" without "from": two known cities joined by "to"
         names = "|".join(re.escape(n.lower()) for n in sorted(known_cities, key=len, reverse=True))

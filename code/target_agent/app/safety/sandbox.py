@@ -18,9 +18,8 @@ class SandboxGuard:
         return assert_permitted(tool_name, declared)
 
     def check_output(self, tool_name: str, permission: Permission, output: dict) -> None:
-        if permission == Permission.SIMULATED_WRITE:
-            if output.get("environment") != "sandbox":
-                raise SafetyViolation(f"{tool_name} returned a non-sandbox result; rejected")
+        if permission == Permission.SIMULATED_WRITE and output.get("environment") != "sandbox":
+            raise SafetyViolation(f"{tool_name} returned a non-sandbox result; rejected")
 
 
 class SandboxBookingService:

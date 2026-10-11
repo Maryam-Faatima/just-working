@@ -7,11 +7,13 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from pydantic import ValidationError
 
 from app.agent.context import AgentContext
 from app.agent.prompts import EXTRACT_SYSTEM, FINAL_SYSTEM, PLAN_SYSTEM
 from app.agent.request_parser import find_dates, parse_request
 from app.agent.state import TravelState
+from app.clock import today as clock_today
 from app.llm.base import LLMError
 from app.safety.permissions import Permission
 from app.safety.redaction import sanitise_user_request
@@ -174,7 +176,7 @@ def safe_resolve(ctx: AgentContext, name: str | None) -> dict | None:
 @graph_node("understand_request")
 def understand_request(state: TravelState, ctx: AgentContext) -> dict:
     acc = Acc(state, ctx, "understand_request")
-    today = date.today()
+    today = clock_today()
     clean, changed = sanitise_user_request(state.user_request)
     if changed:
         acc.notice("warning", "payment_data_removed",
@@ -207,7 +209,7 @@ def understand_request(state: TravelState, ctx: AgentContext) -> dict:
     prefs_raw = raw.get("preferences") or {}
     try:
         prefs = Preferences(**{k: v for k, v in prefs_raw.items() if k in Preferences.model_fields and v is not None})
-    except Exception:
+    except ValidationError:
         prefs = Preferences()
 
     ov = state.request_overrides or {}
@@ -236,21 +238,27 @@ def understand_request(state: TravelState, ctx: AgentContext) -> dict:
 
     missing, reasons = [], []
     if not origin:
-        missing.append("origin"); reasons.append("which city you are flying from")
+        missing.append("origin")
+        reasons.append("which city you are flying from")
     if not destination:
-        missing.append("destination"); reasons.append("where you want to go")
+        missing.append("destination")
+        reasons.append("where you want to go")
     if not dep:
         missing.append("departure_date")
         hint = raw.get("date_hint")
         reasons.append(f"your exact departure date (you said '{hint}')" if hint else "your departure date")
     elif dep < today:
-        missing.append("departure_date"); reasons.append(f"a departure date in the future ({dep} has passed)")
+        missing.append("departure_date")
+        reasons.append(f"a departure date in the future ({dep} has passed)")
     if dep and not ret:
-        missing.append("return_date"); reasons.append("your return date or how many days you will stay")
+        missing.append("return_date")
+        reasons.append("your return date or how many days you will stay")
     elif dep and ret and (ret - dep).days < 1:
-        missing.append("return_date"); reasons.append("a return date at least one night after departure")
+        missing.append("return_date")
+        reasons.append("a return date at least one night after departure")
     if not travelers:
-        missing.append("travelers"); reasons.append("how many people are travelling")
+        missing.append("travelers")
+        reasons.append("how many people are travelling")
 
     if budget is None:
         acc.notice("info", "no_budget", "No budget was given, so options are ranked by value without a budget cap.")
@@ -276,7 +284,9 @@ def clarify(state: TravelState, ctx: AgentContext) -> dict:
 @graph_node("plan_trip")
 def plan_trip(state: TravelState, ctx: AgentContext) -> dict:
     acc = Acc(state, ctx, "plan_trip")
-    read_only = [t for t in ctx.registry.catalogue_for_llm() if t["permission"] == Permission.READ_ONLY.value]
+    # Only tools the plan itself drives. get_return_flights is called by select_return_flight.
+    read_only = [t for t in ctx.registry.catalogue_for_llm()
+                 if t["permission"] == Permission.READ_ONLY.value and t["name"] in CANONICAL_ORDER]
     request_summary = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in {
         "origin": state.origin, "destination": state.destination, "departure_date": state.departure_date,
         "return_date": state.return_date, "travelers": state.travelers, "budget": state.budget,
@@ -504,11 +514,15 @@ def validate_hotels(state: TravelState, ctx: AgentContext) -> dict:
                       f"Hotel search returned {len(out.hotels)} of {out.total_results} results.")
 
     if not out.hotels:
-        if state.hotel_budget_cap is not None and not state.hotel_search_relaxed and acc.can_retry(tool):
+        capped = state.hotel_budget_cap is not None and not state.hotel_search_relaxed
+        if capped and acc.can_retry(tool):
             detail = (f"No hotels at or below {state.hotel_budget_cap:.2f} USD per night. The nightly cap is a "
                       f"non-critical constraint, so it was removed and the search repeated. The total is still checked against the budget.")
             acc.notice("info", "hotel_cap_relaxed", detail)
             return _retry(acc, tool, "empty_results", "retry_relaxed_constraints", detail, hotel_search_relaxed=True)
+        if not capped and acc.can_retry(tool):
+            return _retry(acc, tool, "empty_results", "retry_after_empty_result",
+                          "Hotel search returned nothing; repeating once to rule out a transient failure.")
         return _abort(acc, tool, "empty_results", f"No hotels were found in {state.destination} for {state.departure_date} to {state.return_date}.")
 
     hotels, dupes, conflicts = _split_duplicates(out.hotels, "hotel_id")
@@ -709,7 +723,7 @@ def select_return_flight(state: TravelState, ctx: AgentContext) -> dict:
         indirect = 1 if (prefs.prefer_direct and o["stops"]) else 0
         return (early, indirect, o["price"], o["return_departure"])
 
-    best = sorted(options, key=score)[0]
+    best = min(options, key=score)
     updated = f.model_copy(update={
         "return_flight_number": best["return_flight_number"],
         "return_departure": datetime.fromisoformat(best["return_departure"]),
@@ -784,7 +798,14 @@ def book_trip(state: TravelState, ctx: AgentContext) -> dict:
     bookings: dict[str, Any] = {}
     if "flight" not in state.bookings:
         res = acc.call_with_retry("book_flight", {"flight_id": state.selected_flight.flight_id, "passengers": state.travelers})
-        bookings["flight"] = res.data if res.status == "success" else {"status": "FAILED", "message": res.error.message}
+        if res.status != "success" or res.data["status"] != "CONFIRMED":
+            reason = res.error.message if res.status != "success" else res.data["message"]
+            bookings["flight"] = {"status": "FAILED", "message": reason, "environment": "sandbox"}
+            acc.recover("book_flight", "booking_failed", "report_failure",
+                        f"Flight booking failed ({reason}). The hotel was not reserved, so no partial booking exists.")
+            acc.notice("warning", "booking_failed", f"The flight could not be booked in the sandbox: {reason}")
+            return acc.update(bookings=bookings, next_action="finish", __status__="failure")
+        bookings["flight"] = res.data
     h = state.selected_hotel
     res = acc.call_with_retry("reserve_hotel", {"hotel_id": h.hotel_id, "check_in": state.departure_date.isoformat(),
                                                 "check_out": state.return_date.isoformat(), "guests": state.travelers})
@@ -792,7 +813,7 @@ def book_trip(state: TravelState, ctx: AgentContext) -> dict:
         bookings["hotel"] = res.data | {"hotel_id": h.hotel_id, "hotel_name": h.name}
         return acc.update(bookings=bookings, next_action="finish")
     reason = res.data["message"] if res.status == "success" else res.error.message
-    tried = state.tried_hotel_ids + [h.hotel_id]
+    tried = [*state.tried_hotel_ids, h.hotel_id]
     by_id = {x.hotel_id: x for x in state.hotels}
     alternative = next((by_id[i] for i in state.hotel_ranking if i not in tried and i in by_id), None)
     if alternative and state.booking_alternatives_used < ctx.settings.max_booking_alternatives:

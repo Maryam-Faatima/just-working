@@ -56,7 +56,7 @@ class RunStore:
     def list_runs(self, limit: int = 200) -> list[dict]:
         with self._connect() as con:
             rows = con.execute("SELECT * FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [{k: row[k] for k in row.keys() if k != "record_json"} for row in rows]
+        return [{k: v for k, v in dict(row).items() if k != "record_json"} for row in rows]
 
     def get(self, run_id: str) -> RunRecord | None:
         with self._connect() as con:

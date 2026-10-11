@@ -62,7 +62,7 @@ def _airport_dt(airport: dict) -> datetime:
     raw = raw.strip()
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %I:%M %p", "%Y-%m-%d %I:%M%p"):
         try:
-            return datetime.strptime(raw, fmt)
+            return datetime.strptime(raw, fmt)  # noqa: DTZ007  (airport-local wall-clock time, kept naive on purpose)
         except ValueError:
             continue
     raise UpstreamAPIError(502, f"Unrecognised flight time format: {raw!r}")
