@@ -5,7 +5,7 @@ import { Phase0RubricView } from './components/Phase0RubricView';
 import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
-import { LaunchRunModal } from './components/LaunchRunModal';
+import { RequirementsQuestionnaireView } from './components/RequirementsQuestionnaireView';
 import {
   checkBackendHealth,
   fetchAgentSummary,
@@ -28,10 +28,10 @@ const SCREENS = [
 ];
 
 function App() {
+  const [currentView, setCurrentView] = useState('landing'); // 'landing' | 'questionnaire' | 'analysis'
   const [activeScreenIndex, setActiveScreenIndex] = useState(0);
   const [currentAgent, setCurrentAgent] = useState('');
   const [hasLoadedAgent, setHasLoadedAgent] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
 
   // Loaded outputs for the analyzed agent
@@ -108,6 +108,7 @@ function App() {
             setRunStatusMessage(null);
             await loadAgentData(targetAgent);
             setActiveScreenIndex(0); // Show Pipeline summary
+            setCurrentView('analysis');
           }
         } catch {
           clearInterval(interval);
@@ -131,21 +132,23 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Dynamic Island Header with Carousel Arrows (No drop-down, no hardcoded agents) */}
+      {/* Dynamic Island Header with Carousel Arrows - always visible floating at top */}
       <Header
         activeScreenIndex={activeScreenIndex}
         screens={SCREENS}
         onNavigatePrev={handlePrev}
         onNavigateNext={handleNext}
         currentAgent={currentAgent}
-        onNewAnalysis={() => setIsModalOpen(true)}
+        onNewAnalysis={() => setCurrentView('questionnaire')}
+        currentView={currentView}
+        onHomeClick={() => setCurrentView('landing')}
       />
 
       {/* Main Body */}
       <main style={{ flex: 1, paddingTop: '28px' }}>
-        {/* If no agent has been run yet in this session, show original spacious hero layout with 3D Flip Card */}
-        {!hasLoadedAgent && !isLoading && (
-          <div className="animate-fade-in" style={{
+        {/* VIEW 1: LANDING HERO */}
+        {currentView === 'landing' && (
+          <div className="animate-fade-in landing-hero-grid" style={{
             maxWidth: '1240px',
             margin: '40px auto 80px',
             padding: '0 24px',
@@ -194,10 +197,10 @@ function App() {
                 Statically extract tools, graph routes, and call trees from any Python agent repository. Synthesize Phase 0 developer requirements and generate actionable evaluation rubrics.
               </p>
 
-              {/* Action Button: No plus icon, clean prominent CTA */}
+              {/* Single Clear Action Button */}
               <div>
                 <button
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => setCurrentView('questionnaire')}
                   style={{
                     border: 'none',
                     background: '#000000',
@@ -411,43 +414,72 @@ function App() {
           </div>
         )}
 
-        {/* Phase-by-phase navigation views */}
-        {hasLoadedAgent && !isLoading && (
+        {/* VIEW 2: DEDICATED SETUP & REQUIREMENTS QUESTIONNAIRE PAGE */}
+        {currentView === 'questionnaire' && (
+          <RequirementsQuestionnaireView
+            currentAgent={currentAgent}
+            specData={specData}
+            onBack={() => setCurrentView(hasLoadedAgent ? 'analysis' : 'landing')}
+            onSaveSpec={async (agentName, spec) => {
+              setSpecData(spec);
+              setCurrentAgent(agentName);
+            }}
+            onRunPipeline={handleStartRun}
+            onNavigateToSpec={() => {
+              setCurrentView('analysis');
+              setActiveScreenIndex(1); // Specs & Rubric
+            }}
+          />
+        )}
+
+        {/* VIEW 3: ANALYSIS SUITE (THE REST OF THE SITE) */}
+        {currentView === 'analysis' && (
           <>
-            {currentScreenId === 'summary' && (
-              <PipelineSummaryView
-                summaryData={summaryData}
-                onNavigateStage={(stage) => {
-                  const idx = SCREENS.findIndex(s => s.id === stage);
-                  if (idx !== -1) setActiveScreenIndex(idx);
-                }}
-              />
+            {isLoading && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--ink-muted)', fontStyle: 'italic' }}>
+                Loading outputs for {currentAgent}...
+              </div>
             )}
 
-            {currentScreenId === 'spec' && (
-              <Phase0RubricView
-                specData={specData}
-                rubricData={rubricData}
-              />
-            )}
+            {!isLoading && (
+              <>
+                {currentScreenId === 'summary' && (
+                  <PipelineSummaryView
+                    summaryData={summaryData}
+                    onNavigateStage={(stage) => {
+                      const idx = SCREENS.findIndex(s => s.id === stage);
+                      if (idx !== -1) setActiveScreenIndex(idx);
+                    }}
+                  />
+                )}
 
-            {currentScreenId === 'scan' && (
-              <ScanToolsView
-                scanData={scanData}
-                summaryData={summaryData}
-              />
-            )}
+                {currentScreenId === 'spec' && (
+                  <Phase0RubricView
+                    specData={specData}
+                    rubricData={rubricData}
+                    onNavigateToQuestionnaire={() => setCurrentView('questionnaire')}
+                  />
+                )}
 
-            {currentScreenId === 'callgraph' && (
-              <CallGraphView
-                callgraphData={callgraphData}
-              />
-            )}
+                {currentScreenId === 'scan' && (
+                  <ScanToolsView
+                    scanData={scanData}
+                    summaryData={summaryData}
+                  />
+                )}
 
-            {currentScreenId === 'model' && (
-              <BehavioralModelView
-                modelData={modelData}
-              />
+                {currentScreenId === 'callgraph' && (
+                  <CallGraphView
+                    callgraphData={callgraphData}
+                  />
+                )}
+
+                {currentScreenId === 'model' && (
+                  <BehavioralModelView
+                    modelData={modelData}
+                  />
+                )}
+              </>
             )}
           </>
         )}
@@ -548,13 +580,6 @@ function App() {
           </button>
         </div>
       )}
-
-      {/* Modal to input Git URL or Drag & Drop Folder and answer Phase 0 questions */}
-      <LaunchRunModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onStartRun={handleStartRun}
-      />
     </div>
   );
 }

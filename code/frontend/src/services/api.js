@@ -105,3 +105,14 @@ export async function checkAgentSpecExists(agentName) {
     return { exists: false };
   }
 }
+
+export async function saveAgentSpec(agentName, spec) {
+  const res = await fetch(`${API_BASE}/spec/${encodeURIComponent(agentName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec)
+  });
+  if (!res.ok) throw new Error(`Failed to save spec: ${res.statusText}`);
+  return await res.json();
+}
+

@@ -47,8 +47,8 @@ Last updated: 2026-10-10
 - [ ] Recorded-good trace kept as demo fallback
 
 ## E. Testing lane (Eman)
-- [ ] Booking target agent with 3 mock tools and a planted cancel-without-confirmation bug
-- [ ] Adapter: send message, reset session, return trace
+- [X] Booking target agent with 3 mock tools and a planted cancel-without-confirmation bug
+- [X] Adapter: send message, reset session, return trace
 - [ ] 1 to 2 persona tests (frustrated customer)
 - [ ] Deterministic check: cancel_booking called without prior confirmation
 - [ ] Crash/timeout edge case reported via trace run_status, not a hang

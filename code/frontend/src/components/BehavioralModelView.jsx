@@ -18,6 +18,7 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
   const entries = modelData.entries || [];
   const capabilities = entries.filter(e => e.type === 'capability');
   const workflows = entries.filter(e => e.type === 'workflow');
+  const constraints = entries.filter(e => e.type === 'constraint');
 
   const filteredEntries = entries.filter(e => {
     const matchType = filterType === 'ALL' || e.type === filterType;
@@ -75,9 +76,9 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
         </div>
 
         <div style={{ background: '#fff', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Total Inferred Constraints</div>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Inferred Constraints</div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '26px', fontWeight: 800, color: 'var(--ink-primary)', marginTop: '4px' }}>
-            {entries.reduce((acc, e) => acc + (e.constraints ? e.constraints.length : 0), 0)}
+            {constraints.length}
           </div>
           <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: '2px' }}>rules extracted by LLM & AST</div>
         </div>
@@ -104,7 +105,8 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
           {[
             { id: 'ALL', label: `All Entries (${entries.length})` },
             { id: 'capability', label: `Capabilities (${capabilities.length})` },
-            { id: 'workflow', label: `Workflow States (${workflows.length})` }
+            { id: 'workflow', label: `Workflow States (${workflows.length})` },
+            { id: 'constraint', label: `Inferred Constraints (${constraints.length})` }
           ].map(tab => (
             <button
               key={tab.id}

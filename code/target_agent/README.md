@@ -1,4 +1,4 @@
-# AI Travel Agent Testbed
+# AI Travel Agent
 
 A runnable, observable AI travel agent built as a research testbed for **GreatTest**, an agent-testing project.
 

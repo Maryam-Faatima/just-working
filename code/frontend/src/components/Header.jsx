@@ -6,7 +6,9 @@ export function Header({
   onNavigatePrev,
   onNavigateNext,
   currentAgent,
-  onNewAnalysis
+  onNewAnalysis,
+  currentView = 'analysis',
+  onHomeClick
 }) {
   const currentScreen = screens[activeScreenIndex] || screens[0];
   const canGoPrev = activeScreenIndex > 0;
@@ -26,7 +28,7 @@ export function Header({
       gap: '8px'
     }}>
       {/* Clean Dynamic Island Container */}
-      <div style={{
+      <div className="island-container" style={{
         maxWidth: '1100px',
         width: '100%',
         margin: '0 auto',
@@ -54,16 +56,23 @@ export function Header({
               height: '28px',
               borderRadius: '8px',
               objectFit: 'contain',
-              display: 'block'
+              display: 'block',
+              cursor: onHomeClick ? 'pointer' : 'default'
             }}
+            onClick={onHomeClick}
           />
-          <div style={{
-            fontFamily: 'var(--font-heading)',
-            fontSize: '16.5px',
-            fontWeight: 800,
-            letterSpacing: '-0.3px',
-            color: 'var(--ink-primary)'
-          }}>
+          <div
+            onClick={onHomeClick}
+            style={{
+              fontFamily: 'var(--font-heading)',
+              fontSize: '16.5px',
+              fontWeight: 800,
+              letterSpacing: '-0.3px',
+              color: 'var(--ink-primary)',
+              cursor: onHomeClick ? 'pointer' : 'default',
+              userSelect: 'none'
+            }}
+          >
             GreatTest<span style={{ color: 'var(--accent)' }}>.</span>
           </div>
 
@@ -99,80 +108,134 @@ export function Header({
           )}
         </div>
 
-        {/* Center: Stage Carousel (Prev/Next Arrows + Active Stage Display) */}
+        {/* Center: Stage Carousel or Mode Display */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            onClick={onNavigatePrev}
-            disabled={!canGoPrev}
-            style={{
-              border: '1px solid var(--border-default)',
-              background: canGoPrev ? '#fff' : 'var(--bg-inset)',
-              color: canGoPrev ? 'var(--ink-primary)' : 'var(--ink-faint)',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
+          {currentView === 'analysis' ? (
+            <>
+              <button
+                onClick={onNavigatePrev}
+                disabled={!canGoPrev}
+                style={{
+                  border: '1px solid var(--border-default)',
+                  background: canGoPrev ? '#fff' : 'var(--bg-inset)',
+                  color: canGoPrev ? 'var(--ink-primary)' : 'var(--ink-faint)',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: canGoPrev ? 'pointer' : 'not-allowed',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Previous Stage"
+              >
+                ←
+              </button>
+
+              <div style={{
+                background: 'var(--bg-inset)',
+                padding: '5px 16px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                minWidth: '220px',
+                justifyContent: 'center'
+              }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  color: 'var(--accent)',
+                  background: '#fff',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}>
+                  Phase {activeScreenIndex + 1}/{screens.length}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
+                  {currentScreen.label}
+                </span>
+              </div>
+
+              <button
+                onClick={onNavigateNext}
+                disabled={!canGoNext}
+                style={{
+                  border: '1px solid var(--border-default)',
+                  background: canGoNext ? '#fff' : 'var(--bg-inset)',
+                  color: canGoNext ? 'var(--ink-primary)' : 'var(--ink-faint)',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: canGoNext ? 'pointer' : 'not-allowed',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Next Stage"
+              >
+                →
+              </button>
+            </>
+          ) : currentView === 'questionnaire' ? (
+            <div style={{
+              background: 'var(--bg-inset)',
+              padding: '5px 18px',
+              borderRadius: 'var(--radius-full)',
+              border: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              cursor: canGoPrev ? 'pointer' : 'not-allowed',
-              fontWeight: 800,
-              fontSize: '14px',
-              transition: 'all 0.15s ease'
-            }}
-            title="Previous Stage"
-          >
-            ←
-          </button>
-
-          <div style={{
-            background: 'var(--bg-inset)',
-            padding: '5px 16px',
-            borderRadius: 'var(--radius-full)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            minWidth: '220px',
-            justifyContent: 'center'
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              fontWeight: 800,
-              color: 'var(--accent)',
-              background: '#fff',
-              padding: '2px 6px',
-              borderRadius: '4px'
+              gap: '8px'
             }}>
-              Phase {activeScreenIndex + 1}/{screens.length}
-            </span>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-              {currentScreen.label}
-            </span>
-          </div>
-
-          <button
-            onClick={onNavigateNext}
-            disabled={!canGoNext}
-            style={{
-              border: '1px solid var(--border-default)',
-              background: canGoNext ? '#fff' : 'var(--bg-inset)',
-              color: canGoNext ? 'var(--ink-primary)' : 'var(--ink-faint)',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                fontWeight: 800,
+                color: 'var(--accent)',
+                background: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px'
+              }}>
+                Phase 0
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
+                Requirements Questionnaire
+              </span>
+            </div>
+          ) : (
+            <div style={{
+              background: 'var(--bg-inset)',
+              padding: '5px 18px',
+              borderRadius: 'var(--radius-full)',
+              border: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              cursor: canGoNext ? 'pointer' : 'not-allowed',
-              fontWeight: 800,
-              fontSize: '14px',
-              transition: 'all 0.15s ease'
-            }}
-            title="Next Stage"
-          >
-            →
-          </button>
+              gap: '8px'
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                fontWeight: 800,
+                color: 'var(--accent)',
+                background: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px'
+              }}>
+                Overview
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
+                Multi-Stage Verification System
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right: New Analysis Button */}

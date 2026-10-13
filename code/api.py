@@ -275,6 +275,15 @@ def get_spec(name: str):
         raise HTTPException(status_code=500, detail=f"Failed to read spec.json: {exc}") from exc
 
 
+@app.post("/api/spec/{name}")
+def save_spec(name: str, payload: dict[str, Any]):
+    agent_out = OUTPUTS_DIR / name
+    agent_out.mkdir(parents=True, exist_ok=True)
+    file_path = agent_out / "spec.json"
+    file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {"status": "saved", "agent": name, "path": str(file_path)}
+
+
 @app.get("/api/rubric/{name}")
 def get_rubric(name: str):
     agent_dir = _agent_dir(name)

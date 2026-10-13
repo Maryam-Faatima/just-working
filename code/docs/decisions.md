@@ -53,4 +53,4 @@
 | 49 | The API is local-only | CORS limited to the Vite dev origin, uploads are .zip only with a size cap and a cleaned file name, agent names go through safe_name | A webpage must not be able to make the tool scan folders or write files. Slide 10 says code stays on the developer's machine | 2026-10-11 |
 | 50 | The spec is validated only by phase0.load_spec | The API takes the spec as plain JSON, no Pydantic copy | Follows decisions 12 and 32. One source of truth for the contract | 2026-10-11 |
 | 51 | Mock Phase 2 data is labelled as simulation | The UI shows mock test runs only under a visible SIMULATION label until testing/ produces real traces | A prototype must not present hardcoded results as live ones | 2026-10-11 |
-
+| 52 | pytest runs only tests/ | pytest.ini sets testpaths = tests and skips repos/, outputs/, uploads/, target_agent/ and frontend/ | repos/ holds third-party agents cloned for analysis. Their tests need their own packages, and running them is not our job. The testbed has its own CI job | 2026-10-11 |

@@ -296,3 +296,81 @@ body::after {
 .flip-card-back {
   transform: rotateY(180deg);
 }
+
+/* ==========================================================================
+   Comprehensive Responsive Layout Breakpoints
+   ========================================================================== */
+
+/* 1. Large Tablets & Small Laptops (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .landing-hero-grid {
+    grid-template-columns: 1fr !important;
+    gap: 36px !important;
+    text-align: center;
+  }
+  .landing-hero-grid > div {
+    margin: 0 auto;
+  }
+
+  .interactive-inspector-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .inspector-sticky-card {
+    position: static !important;
+    width: 100% !important;
+  }
+}
+
+/* 2. Tablets & Handhelds (max-width: 768px) */
+@media (max-width: 768px) {
+  /* Island Header adaptation */
+  header {
+    top: 6px !important;
+    padding: 0 10px !important;
+  }
+  
+  .island-container {
+    padding: 6px 14px !important;
+    border-radius: var(--radius-lg) !important;
+    justify-content: center !important;
+    gap: 8px !important;
+  }
+
+  /* Two-column splits collapse to single column */
+  .responsive-split-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* SVG containers ensure horizontal scrolling with smooth touch */
+  .svg-scroll-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100% !important;
+  }
+
+  /* Questionnaire Source Switcher */
+  .source-input-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 3. Small Mobile Phones (max-width: 480px) */
+@media (max-width: 480px) {
+  body {
+    font-size: 13px !important;
+  }
+
+  h1 {
+    font-size: 24px !important;
+    line-height: 1.25 !important;
+  }
+
+  .island-container {
+    padding: 5px 10px !important;
+  }
+
+  .flip-card-inner {
+    height: 320px !important;
+  }
+}

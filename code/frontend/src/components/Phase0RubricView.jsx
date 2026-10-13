@@ -1,12 +1,29 @@
 import React from 'react';
 
-export function Phase0RubricView({ specData, rubricData }) {
+export function Phase0RubricView({ specData, rubricData, onNavigateToQuestionnaire }) {
   if (!specData && !rubricData) {
     return (
       <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto', padding: '0 24px', textAlign: 'center' }}>
         <div style={{ background: '#fff', borderRadius: 'var(--radius-lg)', padding: '48px 24px', border: '1.5px solid var(--border-default)' }}>
           <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink-primary)' }}>No Specifications or Rubric Available</h3>
-          <p style={{ color: 'var(--ink-muted)', marginTop: '8px' }}>Run the pipeline with Phase 0 requirements to see specifications and grading items.</p>
+          <p style={{ color: 'var(--ink-muted)', marginTop: '8px', marginBottom: '16px' }}>Run the pipeline with Phase 0 requirements to see specifications and grading items.</p>
+          {onNavigateToQuestionnaire && (
+            <button
+              onClick={onNavigateToQuestionnaire}
+              style={{
+                border: 'none',
+                background: '#000',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '13px',
+                padding: '10px 22px',
+                borderRadius: 'var(--radius-full)',
+                cursor: 'pointer'
+              }}
+            >
+              Open Requirements Questionnaire →
+            </button>
+          )}
         </div>
       </div>
     );
@@ -20,26 +37,51 @@ export function Phase0RubricView({ specData, rubricData }) {
   return (
     <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto 80px', padding: '0 24px' }}>
       {/* Eyebrow Header - Clean, No "Phase 0" prefix */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          color: 'var(--accent)',
-          fontSize: '11px',
-          fontWeight: 800,
-          textTransform: 'uppercase',
-          letterSpacing: '0.8px',
-          marginBottom: '6px'
-        }}>
-          <span>✦</span> Requirements & Evaluation
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: 'var(--accent)',
+            fontSize: '11px',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.8px',
+            marginBottom: '6px'
+          }}>
+            Requirements & Evaluation
+          </div>
+          <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.6px' }}>
+            Specs & Rubric
+          </h1>
+          <p style={{ color: 'var(--ink-secondary)', fontSize: '14.5px', marginTop: '4px' }}>
+            Developer-declared constraints, scope boundaries, and compiled evaluation grading items.
+          </p>
         </div>
-        <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.6px' }}>
-          Specs & Rubric
-        </h1>
-        <p style={{ color: 'var(--ink-secondary)', fontSize: '14.5px', marginTop: '4px' }}>
-          Developer-declared constraints, scope boundaries, and compiled evaluation grading items.
-        </p>
+
+        {onNavigateToQuestionnaire && (
+          <button
+            onClick={onNavigateToQuestionnaire}
+            style={{
+              border: '1.5px solid var(--border-default)',
+              background: '#fff',
+              color: 'var(--ink-secondary)',
+              fontWeight: 700,
+              fontSize: '12.5px',
+              padding: '8px 18px',
+              borderRadius: 'var(--radius-full)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: 'var(--shadow-card)'
+            }}
+          >
+            <span>Edit in Requirements Questionnaire</span>
+            <span>↗</span>
+          </button>
+        )}
       </div>
 
       {/* 2-Column Bento Grid */}
