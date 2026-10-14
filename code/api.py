@@ -331,3 +331,29 @@ def get_model(name: str):
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise HTTPException(status_code=500, detail=f"Failed to read {candidate}: {exc}") from exc
     raise HTTPException(status_code=404, detail=f"Model for agent '{name}' not found.")
+
+
+@app.get("/api/evidence/{name}")
+def get_evidence(name: str):
+    """Return the evidence graph built by the report stage."""
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "evidence_graph.json"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Evidence graph for agent '{name}' not found.")
+    try:
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read evidence_graph.json: {exc}") from exc
+
+
+@app.get("/api/report/{name}")
+def get_report(name: str):
+    """Return the markdown report built by the report stage."""
+    agent_dir = _agent_dir(name)
+    file_path = agent_dir / "report.md"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report for agent '{name}' not found.")
+    try:
+        return {"agent": name, "report": file_path.read_text(encoding="utf-8")}
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read report.md: {exc}") from exc

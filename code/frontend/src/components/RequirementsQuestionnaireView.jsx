@@ -162,6 +162,32 @@ export function RequirementsQuestionnaireView({
     }
   }, [targetAgent]);
 
+  // Reset all questionnaire fields to clear out previous agent data
+  const clearFormState = () => {
+    setPurpose('');
+    setOutOfScopeList([]);
+    setOutOfScopeInput('');
+    setFailureDef('');
+    setCapabilitiesList([]);
+    setCapabilitiesInput('');
+    setRules([]);
+    setAmbiguityPolicy('ask');
+    setWeakSpotsText('');
+    setUserBehaviorsText('');
+    setServices([]);
+    setQualityNotes('');
+    setMaxCriticalFailures(0);
+    setMinPassRate('');
+    setReferenceMaterialText('');
+    setReportAudience('developer');
+    setReportEmphasis('');
+    setEntryPoint('');
+    setInterfaceType('python_module');
+    setRepeats(3);
+    setHasSavedSpec(false);
+    setSavedSpecRulesCount(0);
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -170,9 +196,8 @@ export function RequirementsQuestionnaireView({
       const res = await uploadAgentFile(file);
       setUploadedPath(res.path);
       const inferred = file.name.replace(/\.[^/.]+$/, '');
-      if (!targetAgent || targetAgent === 'trip-planner-agent') {
-        setTargetAgent(inferred);
-      }
+      setTargetAgent(inferred);
+      clearFormState(); // Fresh state for newly uploaded agent
     } catch (err) {
       alert('Upload failed: ' + err.message);
     } finally {
@@ -505,32 +530,53 @@ export function RequirementsQuestionnaireView({
             </p>
           </div>
 
-          {/* Mode Switcher */}
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-inset)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
-            {[
-              { id: 'git', label: 'Git Repository URL' },
-              { id: 'folder', label: 'Local Directory' },
-              { id: 'zip', label: 'Upload Archive' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSourceMode(tab.id)}
-                style={{
-                  border: 'none',
-                  background: sourceMode === tab.id ? '#fff' : 'transparent',
-                  color: sourceMode === tab.id ? 'var(--ink-primary)' : 'var(--ink-muted)',
-                  fontWeight: sourceMode === tab.id ? 700 : 500,
-                  fontSize: '12px',
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  boxShadow: sourceMode === tab.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Mode Switcher & Reset Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={clearFormState}
+              title="Clear all fields to start a new questionnaire"
+              style={{
+                border: '1px solid var(--border-default)',
+                background: '#fff',
+                color: 'var(--ink-muted)',
+                fontWeight: 600,
+                fontSize: '11px',
+                padding: '5px 10px',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer'
+              }}
+            >
+              Clear Fields
+            </button>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-inset)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
+              {[
+                { id: 'git', label: 'Git Repository URL' },
+                { id: 'folder', label: 'Local Directory' },
+                { id: 'zip', label: 'Upload Archive' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSourceMode(tab.id);
+                  }}
+                  style={{
+                    border: 'none',
+                    background: sourceMode === tab.id ? '#fff' : 'transparent',
+                    color: sourceMode === tab.id ? 'var(--ink-primary)' : 'var(--ink-muted)',
+                    fontWeight: sourceMode === tab.id ? 700 : 500,
+                    fontSize: '12px',
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    boxShadow: sourceMode === tab.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -585,11 +631,11 @@ export function RequirementsQuestionnaireView({
           {sourceMode === 'zip' && (
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                Upload Code Archive (.zip / .tar.gz / .py) *
+                Upload Code Archive (.zip) *
               </label>
               <input
                 type="file"
-                accept=".zip,.tar.gz,.tgz,.tar,.py"
+                accept=".zip,application/zip"
                 onChange={handleFileUpload}
                 disabled={isUploading}
                 style={{
@@ -601,7 +647,7 @@ export function RequirementsQuestionnaireView({
                 }}
               />
               {isUploading && <span style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '4px', display: 'block' }}>Uploading archive...</span>}
-              {uploadedPath && <span style={{ fontSize: '11px', color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono)', marginTop: '4px', display: 'block' }}>Uploaded: {uploadedPath}</span>}
+              {uploadedPath && <span style={{ fontSize: '11px', color: '#16A34A', fontFamily: 'var(--font-mono)', marginTop: '4px', display: 'block' }}>✓ Uploaded to server: {uploadedPath}</span>}
             </div>
           )}
 

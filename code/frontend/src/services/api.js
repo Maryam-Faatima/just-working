@@ -75,7 +75,16 @@ export async function triggerPipelineRun({ source, name, useLlm = false, spec = 
       spec: spec
     })
   });
-  if (!res.ok) throw new Error(`Failed to start pipeline: ${res.statusText}`);
+  if (!res.ok) {
+    let errDetail = res.statusText;
+    try {
+      const errJson = await res.json();
+      if (errJson.detail) errDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Failed to start pipeline: ${errDetail}`);
+  }
   return await res.json();
 }
 
@@ -86,7 +95,16 @@ export async function uploadAgentFile(file) {
     method: 'POST',
     body: formData
   });
-  if (!res.ok) throw new Error(`Failed to upload file: ${res.statusText}`);
+  if (!res.ok) {
+    let errDetail = res.statusText;
+    try {
+      const errJson = await res.json();
+      if (errJson.detail) errDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Failed to upload archive: ${errDetail}`);
+  }
   return await res.json();
 }
 

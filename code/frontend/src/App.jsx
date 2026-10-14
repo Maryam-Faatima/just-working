@@ -103,6 +103,10 @@ function App() {
           const status = await fetchAgentStatus(targetAgent);
           if (status.status === 'running') {
             setRunStatusMessage(status.detail || 'Running pipeline stages...');
+          } else if (status.status === 'failed') {
+            clearInterval(interval);
+            setRunStatusMessage(null);
+            alert(`Pipeline run failed: ${status.error || status.detail || 'Unknown error'}`);
           } else {
             clearInterval(interval);
             setRunStatusMessage(null);
@@ -110,8 +114,10 @@ function App() {
             setActiveScreenIndex(0); // Show Pipeline summary
             setCurrentView('analysis');
           }
-        } catch {
+        } catch (pollErr) {
           clearInterval(interval);
+          setRunStatusMessage(null);
+          console.error('Polling error:', pollErr);
         }
       }, 1500);
     } catch (err) {

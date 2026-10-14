@@ -60,7 +60,7 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     assert not (folder / "spec.json").exists()  # no spec, so no spec copy
     assert summary["ok"] is True
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
-                                 "infer": "skipped", "test": "skipped", "report": "skipped"}
+                                 "infer": "skipped", "test": "skipped", "report": "ok"}
     assert len(lines) == 7
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
     assert {e["name"] for e in model["entries"]} == {"search_things", "delete_thing"}
@@ -117,7 +117,7 @@ def test_failing_optional_stage_is_reported_and_later_stages_still_run(repo, tmp
     monkeypatch.setitem(sys.modules, "testing.runner", fake)
     summary, _ = run(repo, tmp_path, use_llm=False)
     result = statuses(summary)
-    assert result["test"] == "failed" and result["report"] == "skipped"
+    assert result["test"] == "failed" and result["report"] == "ok"
     assert summary["ok"] is False
 
 
