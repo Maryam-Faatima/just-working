@@ -29,7 +29,7 @@ has_finding     model_entry    → finding       (finding.target_id)
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -264,7 +264,7 @@ def build_graph(
 
     return {
         "agent": agent,
-        "built_at": datetime.now(timezone.utc).isoformat(),
+        "built_at": datetime.now(UTC).isoformat(),
         "nodes": list(nodes.values()),
         "edges": edges,
         "stats": {

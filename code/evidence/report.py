@@ -83,13 +83,13 @@ def _write_report(graph: dict, folder: Path, agent: str) -> Path:
 
     lines = [
         f"# Evidence Report — {agent}",
-        f"",
+        "",
         f"Generated: {graph['built_at']}",
-        f"",
-        f"## Summary",
-        f"",
-        f"| Kind | Count |",
-        f"|---|---|",
+        "",
+        "## Summary",
+        "",
+        "| Kind | Count |",
+        "|---|---|",
         f"| Model entries | {stats.get('model_entry_nodes', 0)} |",
         f"| Code locations | {stats.get('code_location_nodes', 0)} |",
         f"| Developer rules | {stats.get('developer_rule_nodes', 0)} |",
@@ -97,9 +97,9 @@ def _write_report(graph: dict, folder: Path, agent: str) -> Path:
         f"| Traces | {stats.get('trace_nodes', 0)} |",
         f"| Findings | {stats.get('finding_nodes', 0)} |",
         f"| **Total edges** | **{stats['edges']}** |",
-        f"",
-        f"## Model Entries",
-        f"",
+        "",
+        "## Model Entries",
+        "",
     ]
 
     for e in sorted(entry_nodes, key=lambda x: x["id"]):

@@ -11,7 +11,6 @@ Covers:
 - build(ctx) pipeline hook — happy path, skip on missing store, disk fallback
 """
 import json
-from pathlib import Path
 
 import pytest
 
