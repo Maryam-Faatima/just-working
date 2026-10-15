@@ -139,18 +139,19 @@ export function RequirementsQuestionnaireView({
       const parts = localFolder.replace(/\/$/, '').split('/');
       inferred = parts[parts.length - 1];
     }
-    if (inferred && (!targetAgent || targetAgent === 'trip-planner-agent')) {
+    if (inferred) {
       setTargetAgent(inferred);
     }
   }, [gitUrl, localFolder, sourceMode]);
 
-  // Check if saved spec exists for targetAgent
+  // Check if saved spec exists for targetAgent and auto-populate form
   useEffect(() => {
     if (targetAgent && targetAgent.trim()) {
       checkAgentSpecExists(targetAgent.trim()).then(res => {
         if (res.exists && res.spec) {
           setHasSavedSpec(true);
           setSavedSpecRulesCount(res.rules_count || res.spec?.rules?.length || 0);
+          loadSpecIntoState(res.spec);
         } else {
           setHasSavedSpec(false);
           setSavedSpecRulesCount(0);

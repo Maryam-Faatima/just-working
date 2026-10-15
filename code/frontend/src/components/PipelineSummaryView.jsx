@@ -157,7 +157,7 @@ export function PipelineSummaryView({ summaryData, onNavigateStage }) {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-muted)' }}>
                     {stg.seconds}s
                   </span>
-                  {onNavigateStage && ['spec', 'scan', 'callgraph', 'model'].includes(stg.stage) && (
+                  {onNavigateStage && ['spec', 'scan', 'callgraph', 'model', 'report'].includes(stg.stage) && (
                     <button
                       onClick={() => onNavigateStage(stg.stage)}
                       style={{

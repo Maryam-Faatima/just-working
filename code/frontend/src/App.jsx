@@ -5,6 +5,7 @@ import { Phase0RubricView } from './components/Phase0RubricView';
 import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
+import { EvidenceGraphView } from './components/EvidenceGraphView';
 import { RequirementsQuestionnaireView } from './components/RequirementsQuestionnaireView';
 import {
   checkBackendHealth,
@@ -14,6 +15,8 @@ import {
   fetchAgentScan,
   fetchAgentCallgraph,
   fetchAgentModel,
+  fetchAgentEvidence,
+  fetchAgentReport,
   triggerPipelineRun,
   fetchAgentStatus
 } from './services/api';
@@ -24,7 +27,8 @@ const SCREENS = [
   { id: 'spec', label: 'Specs & Rubric' },
   { id: 'scan', label: 'AST Scan & Tools' },
   { id: 'callgraph', label: 'Call Graph' },
-  { id: 'model', label: 'Behavioral Model V0' }
+  { id: 'model', label: 'Behavioral Model V0' },
+  { id: 'evidence', label: 'Evidence Graph' }
 ];
 
 function App() {
@@ -41,6 +45,8 @@ function App() {
   const [scanData, setScanData] = useState(null);
   const [callgraphData, setCallgraphData] = useState(null);
   const [modelData, setModelData] = useState(null);
+  const [evidenceData, setEvidenceData] = useState(null);
+  const [reportData, setReportData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [runStatusMessage, setRunStatusMessage] = useState(null);
 
@@ -66,13 +72,15 @@ function App() {
     if (!agentName) return;
     setIsLoading(true);
     try {
-      const [sum, sp, rub, scn, cg, mdl] = await Promise.all([
+      const [sum, sp, rub, scn, cg, mdl, evd, rpt] = await Promise.all([
         fetchAgentSummary(agentName),
         fetchAgentSpec(agentName),
         fetchAgentRubric(agentName),
         fetchAgentScan(agentName),
         fetchAgentCallgraph(agentName),
-        fetchAgentModel(agentName)
+        fetchAgentModel(agentName),
+        fetchAgentEvidence(agentName),
+        fetchAgentReport(agentName)
       ]);
 
       setSummaryData(sum);
@@ -81,6 +89,8 @@ function App() {
       setScanData(scn);
       setCallgraphData(cg);
       setModelData(mdl);
+      setEvidenceData(evd);
+      setReportData(rpt);
       setCurrentAgent(agentName);
       setHasLoadedAgent(true);
     } catch (err) {
@@ -453,7 +463,8 @@ function App() {
                   <PipelineSummaryView
                     summaryData={summaryData}
                     onNavigateStage={(stage) => {
-                      const idx = SCREENS.findIndex(s => s.id === stage);
+                      const target = stage === 'report' ? 'evidence' : stage;
+                      const idx = SCREENS.findIndex(s => s.id === target);
                       if (idx !== -1) setActiveScreenIndex(idx);
                     }}
                   />
@@ -483,6 +494,14 @@ function App() {
                 {currentScreenId === 'model' && (
                   <BehavioralModelView
                     modelData={modelData}
+                  />
+                )}
+
+                {currentScreenId === 'evidence' && (
+                  <EvidenceGraphView
+                    evidenceData={evidenceData}
+                    reportData={reportData}
+                    currentAgent={currentAgent}
                   />
                 )}
               </>

@@ -134,3 +134,16 @@ export async function saveAgentSpec(agentName, spec) {
   return await res.json();
 }
 
+export async function fetchAgentEvidence(agentName) {
+  const res = await fetch(`${API_BASE}/evidence/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentReport(agentName) {
+  const res = await fetch(`${API_BASE}/report/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+
