@@ -8,6 +8,9 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
   const [selectedFuncId, setSelectedFuncId] = useState(null);
   const [selectedTreeNode, setSelectedTreeNode] = useState(null);
   const [treeSearch, setTreeSearch] = useState('');
+  const [treeLimit, setTreeLimit] = useState(25); // Cap initial SVG tree nodes for 60fps rendering
+  const [functionPage, setFunctionPage] = useState(1);
+  const FUNCTIONS_PER_PAGE = 40;
 
   if (!callgraphData) {
     return (
@@ -373,7 +376,10 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
                     <p style={{ fontSize: '12px', marginTop: '4px' }}>Callgraph extraction did not identify step-level interaction trees.</p>
                   </div>
                 ) : (() => {
-                  // Compute dynamic tree layout from filteredInteractions
+                  const visibleInteractions = filteredInteractions.slice(0, treeLimit);
+                  const isTruncated = filteredInteractions.length > treeLimit;
+
+                  // Compute dynamic tree layout from visibleInteractions
                   const rootX = 20;
                   const stepX = 230;
                   const leafX = 450;
@@ -386,7 +392,7 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
                   let currentY = 40;
                   const stepLayouts = [];
 
-                  filteredInteractions.forEach((item, sIdx) => {
+                  visibleInteractions.forEach((item, sIdx) => {
                     // Gather leaf items: roots, tools, agents, functions
                     const leaves = [];
                     (item.roots || []).forEach(r => leaves.push({ type: 'root_fn', label: `[root] ${r}`, raw: r, file: r.split('::')[0] }));
@@ -415,7 +421,8 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
                   const agentDisplayName = callgraphData.agent || 'Agent Pipeline';
 
                   return (
-                    <svg
+                    <>
+                      <svg
                       viewBox={`0 0 1020 ${totalSvgHeight}`}
                       style={{
                         width: '100%',
@@ -576,6 +583,76 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
                         );
                       })}
                     </svg>
+                    {filteredInteractions.length > 25 && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        marginTop: '12px',
+                        background: 'var(--bg-surface-soft)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-md)'
+                      }}>
+                        <span style={{ fontSize: '12px', color: 'var(--ink-secondary)', fontWeight: 600 }}>
+                          Showing {visibleInteractions.length} of {filteredInteractions.length} interaction steps
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {isTruncated && (
+                            <button
+                              onClick={() => setTreeLimit(prev => Math.min(prev + 25, filteredInteractions.length))}
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                background: '#fff',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                color: 'var(--ink-primary)'
+                              }}
+                            >
+                              Show More (+25)
+                            </button>
+                          )}
+                          {isTruncated && (
+                            <button
+                              onClick={() => setTreeLimit(filteredInteractions.length)}
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                background: 'var(--accent)',
+                                border: 'none',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                color: '#fff'
+                              }}
+                            >
+                              Show All ({filteredInteractions.length})
+                            </button>
+                          )}
+                          {treeLimit > 25 && (
+                            <button
+                              onClick={() => setTreeLimit(25)}
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '11.5px',
+                                fontWeight: 600,
+                                background: 'transparent',
+                                border: '1px solid var(--border-subtle)',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                color: 'var(--ink-muted)'
+                              }}
+                            >
+                              Reset to 25
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                   );
                 })()}
               </div>
@@ -997,7 +1074,10 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
               </h3>
               <select
                 value={filterFile}
-                onChange={(e) => setFilterFile(e.target.value)}
+                onChange={(e) => {
+                  setFilterFile(e.target.value);
+                  setFunctionPage(1);
+                }}
                 style={{
                   fontSize: '11.5px',
                   fontFamily: 'var(--font-mono)',
@@ -1018,7 +1098,10 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
               type="text"
               placeholder="Search function name or docstring..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setFunctionPage(1);
+              }}
               style={{
                 padding: '8px 12px',
                 borderRadius: 'var(--radius-sm)',
@@ -1030,47 +1113,111 @@ export function CallGraphView({ callgraphData, onSelectFunction }) {
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '560px', overflowY: 'auto' }}>
-            {filteredFunctions.map(func => {
-              const isSelected = selectedFuncId === func.id;
-              const hasOut = edges.some(e => e.from === func.id);
-              const hasIn = edges.some(e => e.to === func.id);
+          {(() => {
+            const totalFunctionPages = Math.ceil(filteredFunctions.length / FUNCTIONS_PER_PAGE) || 1;
+            const currentFunctionPage = Math.min(functionPage, totalFunctionPages);
+            const visibleFunctions = filteredFunctions.slice(
+              (currentFunctionPage - 1) * FUNCTIONS_PER_PAGE,
+              currentFunctionPage * FUNCTIONS_PER_PAGE
+            );
 
-              return (
-                <div
-                  key={func.id}
-                  onClick={() => setSelectedFuncId(func.id)}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border-subtle)',
-                    background: isSelected ? 'var(--accent-light)' : 'var(--bg-surface-soft)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <code style={{ fontSize: '12.5px', fontWeight: 800, color: isSelected ? 'var(--accent)' : 'var(--ink-primary)' }}>
-                      {func.name}
-                    </code>
-                    <span style={{ fontSize: '10px', color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
-                      L{func.start}–{func.end}
-                    </span>
-                  </div>
+            return (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '560px', overflowY: 'auto' }}>
+                  {visibleFunctions.map(func => {
+                    const isSelected = selectedFuncId === func.id;
+                    const hasOut = edges.some(e => e.from === func.id);
+                    const hasIn = edges.some(e => e.to === func.id);
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {func.file}
+                    return (
+                      <div
+                        key={func.id}
+                        onClick={() => setSelectedFuncId(func.id)}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border-subtle)',
+                          background: isSelected ? 'var(--accent-light)' : 'var(--bg-surface-soft)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <code style={{ fontSize: '12.5px', fontWeight: 800, color: isSelected ? 'var(--accent)' : 'var(--ink-primary)' }}>
+                            {func.name}
+                          </code>
+                          <span style={{ fontSize: '10px', color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
+                            L{func.start}–{func.end}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {func.file}
+                          </span>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {hasIn && <span style={{ fontSize: '9px', background: '#DCFCE7', color: '#16A34A', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>callee</span>}
+                            {hasOut && <span style={{ fontSize: '9px', background: '#E0F2FE', color: '#0284C7', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>caller</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {totalFunctionPages > 1 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: '12px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid var(--border-subtle)',
+                    fontSize: '11.5px',
+                    color: 'var(--ink-secondary)'
+                  }}>
+                    <span>
+                      Page {currentFunctionPage} of {totalFunctionPages} ({filteredFunctions.length} total)
                     </span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {hasIn && <span style={{ fontSize: '9px', background: '#DCFCE7', color: '#16A34A', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>callee</span>}
-                      {hasOut && <span style={{ fontSize: '9px', background: '#E0F2FE', color: '#0284C7', padding: '1px 5px', borderRadius: '3px', fontWeight: 700 }}>caller</span>}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        disabled={currentFunctionPage <= 1}
+                        onClick={() => setFunctionPage(prev => Math.max(1, prev - 1))}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-default)',
+                          background: currentFunctionPage <= 1 ? 'var(--bg-inset)' : '#fff',
+                          color: currentFunctionPage <= 1 ? 'var(--ink-faint)' : 'var(--ink-primary)',
+                          cursor: currentFunctionPage <= 1 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Prev
+                      </button>
+                      <button
+                        disabled={currentFunctionPage >= totalFunctionPages}
+                        onClick={() => setFunctionPage(prev => Math.min(totalFunctionPages, prev + 1))}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-default)',
+                          background: currentFunctionPage >= totalFunctionPages ? 'var(--bg-inset)' : '#fff',
+                          color: currentFunctionPage >= totalFunctionPages ? 'var(--ink-faint)' : 'var(--ink-primary)',
+                          cursor: currentFunctionPage >= totalFunctionPages ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Next
+                      </button>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Right Column: Visual Relationship & Call Links */}

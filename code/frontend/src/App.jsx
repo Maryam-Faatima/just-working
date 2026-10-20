@@ -137,11 +137,15 @@ function App() {
   };
 
   const handlePrev = () => {
-    setActiveScreenIndex(prev => Math.max(0, prev - 1));
+    React.startTransition(() => {
+      setActiveScreenIndex(prev => Math.max(0, prev - 1));
+    });
   };
 
   const handleNext = () => {
-    setActiveScreenIndex(prev => Math.min(SCREENS.length - 1, prev + 1));
+    React.startTransition(() => {
+      setActiveScreenIndex(prev => Math.min(SCREENS.length - 1, prev + 1));
+    });
   };
 
   const currentScreenId = SCREENS[activeScreenIndex]?.id;
@@ -465,7 +469,11 @@ function App() {
                     onNavigateStage={(stage) => {
                       const target = stage === 'report' ? 'evidence' : stage;
                       const idx = SCREENS.findIndex(s => s.id === target);
-                      if (idx !== -1) setActiveScreenIndex(idx);
+                      if (idx !== -1) {
+                        React.startTransition(() => {
+                          setActiveScreenIndex(idx);
+                        });
+                      }
                     }}
                   />
                 )}

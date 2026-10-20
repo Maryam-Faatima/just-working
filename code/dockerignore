@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.llm_cache
+outputs
+repos
+uploads
+tests
+docs
+target_agent
+frontend
+__pycache__
+*.pyc
+.pytest_cache
+.venv
