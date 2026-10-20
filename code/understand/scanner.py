@@ -213,6 +213,17 @@ def _scan_call(node, rel_path, result, loop_nodes=None):
             )
     elif fname == "add_node":
         args = [_label(a) for a in node.args]
+        if args and args[0]:
+            result["nodes"].append(
+                {
+                    "name": args[0],
+                    "function": args[1] if len(args) > 1 else None,
+                    "file": rel_path,
+                    "line": node.lineno,
+                }
+            )
+    elif fname == "add_edge":
+        args = [_label(a) for a in node.args]
         if len(args) >= 2 and all(args[:2]):
             result["edges"].append(
                 {
@@ -239,6 +250,7 @@ def _scan_call(node, rel_path, result, loop_nodes=None):
                         "line": node.lineno,
                     }
                 )
+
     if fname in TOOL_SPEC_CALLS:
         name = _spec_tool_name(node)
         if name:
@@ -246,6 +258,7 @@ def _scan_call(node, rel_path, result, loop_nodes=None):
             result["tools"].append(
                 _entry(name, rel_path, node.lineno, end, f"spec:{fname}", docstring=description)
             )
+
     if fname in TOOL_CONSTRUCTORS:
         name = _constructor_tool_name(node)
         if name:
@@ -275,6 +288,7 @@ def _scan_call(node, rel_path, result, loop_nodes=None):
             }
         )
 
+        
 def scan_file(path, root):
     """Scan one Python file. Syntax errors are reported, not raised."""
     rel_path = path.relative_to(root).as_posix()
