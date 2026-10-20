@@ -165,3 +165,37 @@ def test_node_built_from_a_call_gets_a_function_name(tmp_path):
 def test_unresolvable_variables_do_not_create_registrations(tmp_path):
     (tmp_path / "agent.py").write_text("agent = create_react_agent(model, tools)\n", encoding="utf-8")
     assert scan_repo(tmp_path)["registrations"] == []
+
+def test_custom_registry_toolspec(tmp_path):
+    source = (
+        "reg = ToolRegistry()\n"
+        'reg.register(ToolSpec("search_flights", "Search flights.", In, Out, R, fn))\n'
+        'reg.register(ToolSpec(name="book_flight", description="Book."))\n'
+    )
+    (tmp_path / "registry.py").write_text(source, encoding="utf-8")
+    tools = {t["name"]: t for t in scan_repo(tmp_path)["tools"]}
+    assert set(tools) == {"search_flights", "book_flight"}
+    assert tools["search_flights"]["detected_by"] == "spec:ToolSpec"
+    assert tools["search_flights"]["docstring"] == "Search flights."
+
+
+def test_dynamic_tool_name_is_not_reported_as_the_helper_function(tmp_path):
+    source = (
+        "def build(spec):\n"
+        "    def _run(**kwargs):\n"
+        "        return 1\n"
+        "    return StructuredTool.from_function(func=_run, name=spec.name)\n"
+    )
+    (tmp_path / "agent.py").write_text(source, encoding="utf-8")
+    assert tool_names(scan_repo(tmp_path)) == set()
+
+
+def test_add_node_inside_a_loop_over_a_literal_list(tmp_path):
+    source = (
+        "g = StateGraph(S)\n"
+        'for name in ["plan", "search", "book"]:\n'
+        "    g.add_node(name, getattr(n, name))\n"
+    )
+    (tmp_path / "graph.py").write_text(source, encoding="utf-8")
+    nodes = [n["name"] for n in scan_repo(tmp_path)["nodes"]]
+    assert nodes == ["plan", "search", "book"]

@@ -19,6 +19,8 @@ TOOL_DECORATORS = {
 }
 # Calls that build a tool object from a function.
 TOOL_CONSTRUCTORS = {"Tool", "StructuredTool", "FunctionTool", "from_function", "from_defaults"}
+# Spec objects that declare a tool by name in a custom registry: reg.register(ToolSpec("name", "description", ...)).
+TOOL_SPEC_CALLS = {"ToolSpec", "ToolDefinition", "ToolDef"}
 # Classes that, when subclassed, define a tool.
 TOOL_BASE_CLASSES = {"BaseTool", "Tool"}
 # Calls whose arguments list the tools an agent can use.
@@ -32,7 +34,12 @@ REGISTRATION_CALLS = {
     "AgentExecutor",
     "Agent",
 }
-SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", ".pytest_cache", "__MACOSX"}
+SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", ".pytest_cache", "__MACOSX", "tests", "test"}
+
+
+def _is_test_file(name):
+    """Test code sets up fake tools; it is not part of the agent, so it is not scanned."""
+    return name.startswith("test_") or name.endswith("_test.py") or name == "conftest.py"
 
 def _simple_name(node):
     """Last name part of a Name, Attribute or Call: llm.function_tool(...) -> function_tool."""
@@ -113,6 +120,7 @@ def _constructor_tool_name(call):
             value = _const_str(kw.value)
             if value:
                 return value
+            return None  # name=some_variable: the real name is dynamic, so skip it (not the helper's name)
     for kw in call.keywords:
         if kw.arg in ("func", "coroutine"):
             value = _simple_name(kw.value)
@@ -158,22 +166,52 @@ def _conditional_targets(call):
         values = []
     return [t for t in (_label(v) for v in values) if t]
 
-def _scan_call(node, rel_path, result):
+def _spec_tool_name(call):
+    """Tool name from ToolSpec("name", "description", ...) or ToolSpec(name="name", ...)."""
+    if call.args:
+        value = _const_str(call.args[0])
+        if value:
+            return value
+    for kw in call.keywords:
+        if kw.arg == "name":
+            return _const_str(kw.value)
+    return None
+
+
+def _loop_node_names(tree):
+    """Map id(add_node call) to the names it creates when it sits in `for name in ["a", "b"]:`."""
+    found = {}
+    for loop in ast.walk(tree):
+        if not (isinstance(loop, ast.For) and isinstance(loop.target, ast.Name)):
+            continue
+        if not isinstance(loop.iter, (ast.List, ast.Tuple)):
+            continue
+        names = [_const_str(e) for e in loop.iter.elts]
+        if not names or not all(names):
+            continue
+        for stmt in loop.body:
+            for call in ast.walk(stmt):
+                if (
+                    isinstance(call, ast.Call)
+                    and _simple_name(call.func) == "add_node"
+                    and call.args
+                    and isinstance(call.args[0], ast.Name)
+                    and call.args[0].id == loop.target.id
+                ):
+                    found[id(call)] = names
+    return found
+
+
+def _scan_call(node, rel_path, result, loop_nodes=None):
     fname = _simple_name(node.func)
     end = getattr(node, "end_lineno", node.lineno)
 
-    if fname == "add_node":
-        args = [_label(a) for a in node.args]
-        if args and args[0]:
+    if fname == "add_node" and loop_nodes and id(node) in loop_nodes:
+        for name in loop_nodes[id(node)]:
             result["nodes"].append(
-                {
-                    "name": args[0],
-                    "function": args[1] if len(args) > 1 else None,
-                    "file": rel_path,
-                    "line": node.lineno,
-                }
+                {"name": name, "function": None, "file": rel_path, "line": node.lineno}
             )
-    elif fname == "add_edge":
+    elif fname == "add_node":
         args = [_label(a) for a in node.args]
         if len(args) >= 2 and all(args[:2]):
             result["edges"].append(
@@ -201,7 +239,13 @@ def _scan_call(node, rel_path, result):
                         "line": node.lineno,
                     }
                 )
-
+    if fname in TOOL_SPEC_CALLS:
+        name = _spec_tool_name(node)
+        if name:
+            description = _const_str(node.args[1]) if len(node.args) > 1 else None
+            result["tools"].append(
+                _entry(name, rel_path, node.lineno, end, f"spec:{fname}", docstring=description)
+            )
     if fname in TOOL_CONSTRUCTORS:
         name = _constructor_tool_name(node)
         if name:
@@ -250,6 +294,7 @@ def scan_file(path, root):
         return result
 
     seen_schema_names = set()
+    loop_nodes = _loop_node_names(tree)
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for decorator in node.decorator_list:
@@ -278,7 +323,7 @@ def scan_file(path, root):
                     )
                 )
         elif isinstance(node, ast.Call):
-            _scan_call(node, rel_path, result)
+            _scan_call(node, rel_path, result, loop_nodes)
         elif isinstance(node, ast.Dict):
             name = _schema_tool_name(node)
             if name and name not in seen_schema_names:
@@ -300,7 +345,7 @@ def scan_repo(root):
     root = Path(root).resolve()
     files = []
     for path in sorted(root.rglob("*.py")):
-        if any(part in SKIP_DIRS for part in path.relative_to(root).parts):
+        if any(part in SKIP_DIRS for part in path.relative_to(root).parts) or _is_test_file(path.name):
             continue
         files.append(scan_file(path, root))
 

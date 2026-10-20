@@ -1,0 +1,1 @@
+{"provider": "gemini", "text": "{\n  \"capabilities\": [\n    \"search_flights\",\n    \"search_hotels\",\n    \"get_weather\",\n    \"get_exchange_rate\",\n    \"get_destination_info\",\n    \"get_return_flights\",\n    \"create_itinerary\",\n    \"validate_itinerary\",\n    \"book_flight\",\n    \"reserve_hotel\"\n  ],\n  \"steps\": [],\n  \"constraints\": []\n}"}
