@@ -9,8 +9,8 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] Paste supervisor and co-supervisor mid-eval feedback into the action register (SH-4, MF)
 - [ ] Co-supervisor: confidence rates must have evidence, answered by MF-5
 - [ ] Cached V0 output saved as demo fallback (MF-8)
-- [ ] Recorded-good trace saved as demo fallback (EH-7)
-- [ ] CI step that runs the 2 skipped real-agent adapter tests (EH-8)
+- [X] Recorded-good trace saved as demo fallback (EH-7)
+- [X] CI step that runs the 2 skipped real-agent adapter tests (EH-8)
 - [ ] Report fixes: Table C.2 formatting, target-agent test count (93 vs 95), per-member AI entries, screenshots, contribution table checked against commit history (all)
 
 ## B. Contracts and fixtures (9 Nov)

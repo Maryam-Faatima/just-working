@@ -1,6 +1,6 @@
 """Live providers, tested offline against recorded responses (no network, no API quota)."""
 import json
-from datetime import date
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -14,7 +14,9 @@ from app.schemas.tools import FlightSearchOutput, HotelSearchOutput, ReturnFligh
 from app.tools.errors import UpstreamAPIError
 
 FIX = Path(__file__).parent / "fixtures"
-D, R = date(2026, 11, 12), date(2026, 11, 16)
+# Dates are relative to today so the test never expires (a fixed date failed once it passed).
+D = datetime.now(tz=UTC).date() + timedelta(days=40)
+R = D + timedelta(days=4)
 
 GEOCODE = {
     "islamabad": {"name": "Islamabad", "latitude": 33.72148, "longitude": 73.04329, "country_code": "PK", "timezone": "Asia/Karachi"},
@@ -31,7 +33,9 @@ def fake_handler(request: httpx.Request) -> httpx.Response:
         assert params["api_key"] == "test-key"
         name = ("serpapi_hotels" if params["engine"] == "google_hotels"
                 else "serpapi_returns" if "departure_token" in params else "serpapi_flights")
-        return httpx.Response(200, json=json.loads((FIX / f"{name}.json").read_text()))
+        # The recordings were captured for 12-16 Nov 2026; shift them to the test's own dates.
+        text = (FIX / f"{name}.json").read_text().replace("2026-11-12", D.isoformat()).replace("2026-11-16", R.isoformat())
+        return httpx.Response(200, json=json.loads(text))
     if host == "geocoding-api.open-meteo.com":
         hit = GEOCODE.get(params["name"].lower())
         return httpx.Response(200, json={"results": [hit]} if hit else {})
@@ -110,7 +114,7 @@ def test_live_agent_end_to_end_with_return_leg_and_sandbox_booking(live_settings
     client = httpx.Client(transport=httpx.MockTransport(fake_handler))
     monkeypatch.setattr(runner_mod, "build_services", lambda s: build_services(s, http_client=client))
     rec = AgentRunner(live_settings).run(RunRequest(
-        request_text="I want to travel from Islamabad to Dubai on 12 November 2026 for 5 days. My budget is $1500. "
+        request_text=f"I want to travel from Islamabad to Dubai on {D:%d %B %Y} for 5 days. My budget is $1500. "
                      "I prefer a comfortable hotel."))
     st = rec.final_state
     assert rec.data_mode == "live" and rec.status in ("completed", "completed_with_warnings")

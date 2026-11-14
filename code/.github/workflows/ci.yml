@@ -17,6 +17,10 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: ruff check .
+      - name: Install target agent packages (runs the real-agent adapter tests)
+        run: |
+             pip install -r target_agent/requirements.txt
+             python -c "import langgraph"
       - run: pytest -v tests
 
   target-agent:
