@@ -43,8 +43,9 @@ class TimeoutBackend:
         raise AgentTimedOut("too slow")
 
 
-def ctx_for(tmp_path, specs, backend=EchoBackend, repeats=None):
-    ctx = {"name": "fake", "folder": tmp_path, "test_specs": specs, "backend_factory": backend}
+def ctx_for(tmp_path, specs, backend=EchoBackend, repeats=None, simulator=None):
+    # No simulator unless a test passes one: unit tests never call a real LLM.
+    ctx = {"name": "fake", "folder": tmp_path, "test_specs": specs, "backend_factory": backend, "simulator": simulator}
     if repeats is not None:
         ctx["spec"] = {"run_config": {"repeats": repeats}}
     return ctx
@@ -91,7 +92,7 @@ def test_spec_without_script_is_listed_as_not_run(tmp_path):
     ctx = ctx_for(tmp_path, [make_spec("RT-1"), make_spec("RT-2", script=None)], repeats=1)
     assert run(ctx).endswith("; 1 not run")
     not_run = ctx["test_run"]["tests"][1]
-    assert not_run["status"] == "not_run" and "EH-2" in not_run["reason"]
+    assert not_run["status"] == "not_run" and "simulator" in not_run["reason"]
 
 
 def test_invalid_spec_is_reported_not_run(tmp_path):
@@ -150,3 +151,76 @@ def test_travel_seed_specs_are_valid_and_scripted():
     specs = json.loads(SEEDS.read_text(encoding="utf-8"))
     assert len({s["test_id"] for s in specs}) == len(specs) >= 6  # unique ids
     assert all(spec_problem(s) is None for s in specs)  # valid and every one has a script
+
+
+class ScriptedSimulator:
+    """Returns the given messages in order, then None (done). Records what it was shown."""
+
+    def __init__(self, messages, error=None):
+        self.messages, self.error, self.seen = list(messages), error, []
+
+    def next_message(self, spec, turns):
+        self.seen.append(list(turns))
+        if self.error:
+            raise self.error
+        return self.messages.pop(0) if self.messages else None
+
+
+def user_messages(tmp_path, name="RT-1_run1.json"):
+    trace = json.loads((tmp_path / "traces" / name).read_text(encoding="utf-8"))
+    return [t["content"] for t in trace["turns"] if t["role"] == "user"]
+
+
+def test_simulator_continues_after_the_script(tmp_path):
+    sim = ScriptedSimulator(["simulated one", "simulated two"])
+    ctx = ctx_for(tmp_path, [make_spec(script=["scripted"])], repeats=1, simulator=sim)
+    run(ctx)
+    assert user_messages(tmp_path) == ["scripted", "simulated one", "simulated two"]
+    assert ctx["test_run"]["tests"][0]["simulated_messages"] == 2
+    assert len(sim.seen[0]) == 2  # it saw the scripted message and the agent's reply
+
+
+def test_simulator_writes_the_opening_message_when_there_is_no_script(tmp_path):
+    run(ctx_for(tmp_path, [make_spec(script=None)], repeats=1, simulator=ScriptedSimulator(["hello there"])))
+    assert user_messages(tmp_path) == ["hello there"]
+
+
+def test_turn_budget_also_limits_simulated_messages(tmp_path):
+    sim = ScriptedSimulator(["s1", "s2", "s3", "s4", "s5"])
+    run(ctx_for(tmp_path, [make_spec(script=["scripted"], turn_budget=3)], repeats=1, simulator=sim))
+    assert user_messages(tmp_path) == ["scripted", "s1", "s2"]
+
+
+def test_simulator_done_ends_the_conversation_early(tmp_path):
+    run(ctx_for(tmp_path, [make_spec(script=["scripted"])], repeats=1, simulator=ScriptedSimulator([])))
+    assert user_messages(tmp_path) == ["scripted"]
+
+
+def test_failing_simulator_falls_back_to_scripts_and_says_why(tmp_path):
+    from testing.simulator import SimulatorUnavailable
+    sim = ScriptedSimulator([], error=SimulatorUnavailable("GEMINI_API_KEY not set"))
+    ctx = ctx_for(tmp_path, [make_spec("RT-1"), make_spec("RT-2", script=None)], repeats=1, simulator=sim)
+    detail = run(ctx)
+    assert "user simulator off: GEMINI_API_KEY not set" in detail
+    assert ctx["test_run"]["tests"][0]["status"] == "ran"  # the scripted test still ran
+    assert ctx["test_run"]["tests"][1]["status"] == "not_run"  # nothing could start the unscripted one
+    assert ctx["test_run"]["simulator_note"].startswith("user simulator off")
+    assert len(sim.seen) == 1  # switched off after the first failure, not retried for every test
+
+
+def test_crash_stops_the_simulated_conversation(tmp_path):
+    sim = ScriptedSimulator(["never sent"])
+    ctx = ctx_for(tmp_path, [make_spec(script=["hi"])], backend=CrashBackend, repeats=1, simulator=sim)
+    run(ctx)
+    assert user_messages(tmp_path) == ["hi"] and sim.seen == []
+
+
+def test_no_llm_runs_have_no_simulator():
+    from testing.runner import make_simulator
+    assert make_simulator({"use_llm": False}) is None
+
+
+def test_cache_can_be_turned_off_for_the_reproducibility_study():
+    from testing.runner import make_simulator
+    assert make_simulator({}).use_cache is True
+    assert make_simulator({"simulator_cache": False}).use_cache is False

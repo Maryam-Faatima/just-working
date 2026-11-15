@@ -3,8 +3,9 @@
 The pipeline calls run(ctx) as stage 5 ("test"). For each test spec the runner:
 
 1. checks the spec against schemas/test_spec.schema.json (an invalid spec is reported, not run);
-2. sends the spec's scripted user messages through the adapter, up to the turn budget
-   ({date+N} in a message becomes the date N days from today, so tests never expire);
+2. sends the spec's scripted user messages through the adapter ({date+N} in a message becomes
+   the date N days from today, so tests never expire), then lets the user simulator (EH-2)
+   continue the conversation until the turn budget runs out or the simulated user is done;
 3. repeats the conversation as many times as the developer asked in Phase 0
    (run_config.repeats, default 3), so results can be reported as passes out of total runs;
 4. saves each trace to <output folder>/traces/<test_id>_run<k>.json.
@@ -12,7 +13,9 @@ The pipeline calls run(ctx) as stage 5 ("test"). For each test spec the runner:
 It then writes <output folder>/test_run.json and puts the specs, traces and summary into ctx
 for the checks (MF), the judge (AY) and the report stage.
 
-Specs without a script are listed as "not_run": they need the user simulator (EH-2).
+A spec without a script gets its opening message from the simulator. If the simulator cannot be
+used (no LLM key, or a --no-llm run), the runner carries on with scripts only and notes why;
+a spec with no script is then listed as "not_run".
 Crashes and timeouts are recorded through the trace's run_status and never stop the runner.
 """
 
@@ -27,7 +30,8 @@ from typing import Any
 
 import jsonschema
 
-from testing.adapter import REPO_ROOT, Adapter, Backend, TravelAgentBackend, run_conversation
+from testing.adapter import REPO_ROOT, Adapter, Backend, TravelAgentBackend
+from testing.simulator import SimulatorUnavailable, UserSimulator
 
 TEST_SPEC_SCHEMA_PATH = REPO_ROOT / "schemas" / "test_spec.schema.json"
 DEFAULT_REPEATS = 3
@@ -67,38 +71,87 @@ def repeats_for(ctx: dict[str, Any]) -> int:
     return max(1, min(MAX_REPEATS, value))
 
 
-def spec_problem(spec: dict[str, Any]) -> str | None:
-    """Why a spec cannot run, or None if it is valid and has a script."""
+def spec_problem(spec: dict[str, Any], has_simulator: bool = False) -> str | None:
+    """Why a spec cannot run, or None if it is valid and has a script or a simulator to start it."""
     schema = json.loads(TEST_SPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
     try:
         jsonschema.validate(spec, schema)
     except jsonschema.ValidationError as exc:
         return f"invalid test spec: {exc.message}"
-    if not spec.get("script"):
-        return "no script yet; needs the user simulator (EH-2)"
+    if not spec.get("script") and not has_simulator:
+        return "no script, and the user simulator is not available"
     return None
 
 
-def run_test(spec: dict[str, Any], backend_factory: BackendFactory, repeats: int, traces_dir: Path) -> dict[str, Any]:
+class SimulatorState:
+    """The simulator shared by every test in a run; switched off for the run if it fails once."""
+
+    def __init__(self, simulator: UserSimulator | None):
+        self.simulator = simulator
+        self.note: str | None = None
+
+    def next_message(self, spec: dict[str, Any], turns: list[dict[str, Any]]) -> str | None:
+        if self.simulator is None:
+            return None
+        try:
+            return self.simulator.next_message(spec, turns)
+        except SimulatorUnavailable as exc:
+            self.simulator, self.note = None, f"user simulator off: {exc}"
+            return None
+
+
+def converse(adapter: Adapter, spec: dict[str, Any], sim: SimulatorState) -> tuple[dict[str, Any] | None, int]:
+    """One conversation: the script first, then simulated messages, within the turn budget.
+
+    Returns (trace, number of simulated messages), or (None, 0) if no message could be sent.
+    """
+    adapter.reset_session()
+    budget = spec["turn_budget"]
+    sent = simulated = 0
+    for text in expand_script(spec.get("script") or [])[:budget]:
+        sent += 1
+        if adapter.send_message(text) is None:
+            return adapter.get_trace(), simulated
+    while sent < budget and not adapter.finished:
+        text = sim.next_message(spec, adapter.turns)
+        if text is None:
+            break
+        sent += 1
+        simulated += 1
+        if adapter.send_message(text) is None:
+            break
+    if sent == 0:
+        return None, 0
+    return adapter.get_trace(), simulated
+
+
+def run_test(spec: dict[str, Any], backend_factory: BackendFactory, repeats: int, traces_dir: Path,
+             sim: SimulatorState | None = None) -> dict[str, Any]:
     """Runs one spec `repeats` times. Returns its summary; traces are saved to traces_dir."""
+    sim = sim or SimulatorState(None)
     test_id = str(spec.get("test_id", "unknown"))
     summary: dict[str, Any] = {"test_id": test_id, "target_id": spec.get("target_id"), "runs": 0}
-    problem = spec_problem(spec)
+    problem = spec_problem(spec, has_simulator=sim.simulator is not None)
     if problem:
         summary.update(status="invalid" if problem.startswith("invalid") else "not_run", reason=problem)
         return summary
     counts = dict.fromkeys(STATUSES, 0)
     files: list[str] = []
     traces: list[dict[str, Any]] = []
+    simulated_total = 0
     for k in range(1, repeats + 1):
         adapter = Adapter(backend_factory(), test_id=test_id, modality=spec["modality"])
-        trace = run_conversation(adapter, expand_script(spec["script"]), spec["turn_budget"])
+        trace, simulated = converse(adapter, spec, sim)
+        if trace is None:
+            summary.update(status="not_run", reason=sim.note or "no message could be sent")
+            return summary
+        simulated_total += simulated
         counts[trace["run_status"]] += 1
         path = traces_dir / f"{test_id}_run{k}.json"
         path.write_text(json.dumps(trace, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         files.append(path.name)
         traces.append(trace)
-    summary.update(status="ran", runs=repeats, **counts, traces=files)
+    summary.update(status="ran", runs=repeats, **counts, simulated_messages=simulated_total, traces=files)
     summary["_traces"] = traces  # kept in memory for ctx, not written to test_run.json
     return summary
 
@@ -113,13 +166,16 @@ def run(ctx: dict[str, Any]) -> str:
     traces_dir.mkdir(parents=True, exist_ok=True)
     backend_factory: BackendFactory = ctx.get("backend_factory") or TravelAgentBackend
     repeats = repeats_for(ctx)
+    sim = SimulatorState(make_simulator(ctx))
 
-    results = [run_test(spec, backend_factory, repeats, traces_dir) for spec in specs]
+    results = [run_test(spec, backend_factory, repeats, traces_dir, sim) for spec in specs]
     all_traces = [t for r in results for t in r.pop("_traces", [])]
     totals = {s: sum(r.get(s, 0) for r in results) for s in STATUSES}
     ran = sum(1 for r in results if r["status"] == "ran")
     skipped = len(results) - ran
-    run_record = {"repeats": repeats, "tests": results, "totals": totals}
+    run_record: dict[str, Any] = {"repeats": repeats, "tests": results, "totals": totals}
+    if sim.note:
+        run_record["simulator_note"] = sim.note
     (folder / "test_run.json").write_text(json.dumps(run_record, indent=2) + "\n", encoding="utf-8")
 
     ctx["test_specs"] = specs
@@ -127,7 +183,17 @@ def run(ctx: dict[str, Any]) -> str:
     ctx["test_run"] = run_record
     detail = (f"{ran} test(s) x {repeats} run(s): {totals['completed']} completed, "
               f"{totals['crashed']} crashed, {totals['timeout']} timed out")
-    return detail + (f"; {skipped} not run" if skipped else "")
+    detail += f"; {skipped} not run" if skipped else ""
+    return detail + (f"; {sim.note}" if sim.note else "")
+
+
+def make_simulator(ctx: dict[str, Any]) -> UserSimulator | None:
+    """ctx["simulator"] if given; none for --no-llm runs; otherwise an LLM simulator (cached by default)."""
+    if "simulator" in ctx:
+        return ctx["simulator"]
+    if not ctx.get("use_llm", True):
+        return None
+    return UserSimulator(use_cache=ctx.get("simulator_cache", True))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,12 +204,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("specs", help="a test spec JSON file (one spec or a list of specs)")
     parser.add_argument("--repeats", type=int, default=DEFAULT_REPEATS, help="runs per test (default 3)")
     parser.add_argument("--out", default="outputs/manual_run", help="folder for traces and test_run.json")
+    parser.add_argument("--no-llm", action="store_true", help="scripts only, no user simulator")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="fresh simulator replies on every run (for the reproducibility study, EH-6)")
     args = parser.parse_args(argv)
     data = json.loads(Path(args.specs).read_text(encoding="utf-8"))
     ctx: dict[str, Any] = {
         "test_specs": data if isinstance(data, list) else [data],
         "folder": Path(args.out),
         "spec": {"run_config": {"repeats": args.repeats}},
+        "use_llm": not args.no_llm,
+        "simulator_cache": not args.no_cache,
     }
     print(run(ctx))
     print(f"traces and test_run.json saved in {args.out}")
