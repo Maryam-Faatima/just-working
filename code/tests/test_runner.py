@@ -90,7 +90,7 @@ def test_timeout_is_recorded_never_a_hang(tmp_path):
 
 def test_spec_without_script_is_listed_as_not_run(tmp_path):
     ctx = ctx_for(tmp_path, [make_spec("RT-1"), make_spec("RT-2", script=None)], repeats=1)
-    assert run(ctx).endswith("; 1 not run")
+    assert run(ctx).endswith("; 1 not run (unscripted tests need the user simulator)")
     not_run = ctx["test_run"]["tests"][1]
     assert not_run["status"] == "not_run" and "simulator" in not_run["reason"]
 
@@ -224,3 +224,41 @@ def test_cache_can_be_turned_off_for_the_reproducibility_study():
     from testing.runner import make_simulator
     assert make_simulator({}).use_cache is True
     assert make_simulator({"simulator_cache": False}).use_cache is False
+
+
+def model_ctx(tmp_path, **extra):
+    """A ctx as the pipeline leaves it after stage 4: a rubric and a model, but no test specs."""
+    store = {"entries": [{"id": "cap_001", "type": "capability", "name": "search_flights",
+                          "description": "Agent can search flights"}]}
+    ctx = {"name": "fake", "folder": tmp_path, "rubric": {"items": []}, "store": store, "simulator": None}
+    ctx.update(extra)
+    return ctx
+
+
+def test_seed_tests_are_generated_when_there_are_none(tmp_path):
+    ctx = model_ctx(tmp_path)
+    detail = run(ctx)
+    assert detail == "generated 1 seed test(s); not run: no adapter for this agent yet (EH-4)"
+    saved = json.loads((tmp_path / "test_specs.json").read_text(encoding="utf-8"))
+    assert saved == ctx["test_specs"] and saved[0]["target_id"] == "cap_001"
+
+
+def test_generated_tests_run_when_the_agent_can_be_started(tmp_path):
+    ctx = model_ctx(tmp_path, backend_factory=EchoBackend, simulator=ScriptedSimulator(["find me a flight"]),
+                    spec={"run_config": {"repeats": 1}})
+    assert run(ctx).startswith("generated 1 seed test(s); 1 test(s) x 1 run(s): 1 completed")
+
+
+def test_an_existing_test_list_is_used_not_regenerated(tmp_path):
+    (tmp_path / "test_specs.json").write_text(json.dumps([make_spec("MY-1")]), encoding="utf-8")
+    ctx = model_ctx(tmp_path)
+    run(ctx)
+    assert [s["test_id"] for s in ctx["test_specs"]] == ["MY-1"]
+
+
+def test_only_the_travel_agent_can_be_run_until_eh4(tmp_path):
+    from testing.adapter import TARGET_AGENT_DIR
+    from testing.runner import can_run_agent
+    assert can_run_agent({"repo_root": TARGET_AGENT_DIR}) is True
+    assert can_run_agent({"repo_root": tmp_path}) is False
+    assert can_run_agent({"backend_factory": EchoBackend}) is True

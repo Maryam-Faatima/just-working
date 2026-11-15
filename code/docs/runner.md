@@ -15,7 +15,7 @@ test specs  ->  runner  ->  adapter  ->  agent under test
 
 ## What it does
 
-1. Loads test specs from `ctx["test_specs"]`, or from `<output folder>/test_specs.json` (where the generator, EH-1, will write them).
+1. Loads test specs from `ctx["test_specs"]`, or from `<output folder>/test_specs.json`. If there are none, the seed generator (EH-1, see `docs/generator.md`) writes them from the rubric and model first. Until the universal adapter (EH-4) exists, tests are only run against the travel agent in `target_agent/`; for other agents they are generated and saved but not run.
 2. Checks each spec against `schemas/test_spec.schema.json`. An invalid spec is reported as `invalid` and not run.
 3. Sends the spec's `script` messages through the adapter (a `{date+N}` in a message becomes the date N days from today, so scripted tests never expire), then lets the user simulator (EH-2, see `docs/simulator.md`) continue the conversation. `turn_budget` limits the total number of user messages.
 4. Repeats each test `run_config.repeats` times (Phase 0 answer, default 3, kept within 1 to 20), so results can be reported as passes out of total runs.

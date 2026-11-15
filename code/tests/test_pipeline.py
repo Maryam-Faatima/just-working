@@ -62,7 +62,9 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
                                  "infer": "skipped", "test": "ok", "report": "ok"}
     test_stage = next(r for r in summary["stages"] if r["stage"] == "test")
-    assert test_stage["detail"] == "no test specs yet"  # the runner exists but has nothing to run
+    # the generator (EH-1) writes one test per tool; only the travel agent can be run until EH-4
+    assert test_stage["detail"] == "generated 2 seed test(s); not run: no adapter for this agent yet (EH-4)"
+    assert len(json.loads((folder / "test_specs.json").read_text(encoding="utf-8"))) == 2
     assert len(lines) == 7
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
     assert {e["name"] for e in model["entries"]} == {"search_things", "delete_thing"}

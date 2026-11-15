@@ -1,6 +1,8 @@
 """Test runner (EH-3): runs test specs against the agent under test and saves every trace.
 
-The pipeline calls run(ctx) as stage 5 ("test"). For each test spec the runner:
+The pipeline calls run(ctx) as stage 5 ("test"). If there are no test specs yet, the seed generator
+(EH-1) writes them from the rubric and the model into <output folder>/test_specs.json first.
+For each test spec the runner:
 
 1. checks the spec against schemas/test_spec.schema.json (an invalid spec is reported, not run);
 2. sends the spec's scripted user messages through the adapter ({date+N} in a message becomes
@@ -30,7 +32,8 @@ from typing import Any
 
 import jsonschema
 
-from testing.adapter import REPO_ROOT, Adapter, Backend, TravelAgentBackend
+from testing.adapter import REPO_ROOT, TARGET_AGENT_DIR, Adapter, Backend, TravelAgentBackend
+from testing.generator import generate
 from testing.simulator import SimulatorUnavailable, UserSimulator
 
 TEST_SPEC_SCHEMA_PATH = REPO_ROOT / "schemas" / "test_spec.schema.json"
@@ -156,12 +159,43 @@ def run_test(spec: dict[str, Any], backend_factory: BackendFactory, repeats: int
     return summary
 
 
+def generate_specs(ctx: dict[str, Any], folder: Path) -> list[dict[str, Any]]:
+    """Seed tests from the rubric and model in ctx (EH-1), saved to <folder>/test_specs.json."""
+    store = ctx.get("store")
+    if ctx.get("rubric") is None or store is None:
+        return []
+    entries = store.to_dict()["entries"] if hasattr(store, "to_dict") else store.get("entries", [])
+    specs, warnings = generate(ctx["rubric"], entries, ctx.get("spec"))
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "test_specs.json").write_text(json.dumps(specs, indent=2) + "\n", encoding="utf-8")
+    ctx["generator_warnings"] = warnings
+    return specs
+
+
+def can_run_agent(ctx: dict[str, Any]) -> bool:
+    """True if the runner can start this agent: a backend was given, or it is the travel agent.
+
+    Until the universal adapter (EH-4) exists, only the travel agent in target_agent/ can be run.
+    """
+    if ctx.get("backend_factory"):
+        return True
+    root = ctx.get("repo_root")
+    return root is not None and Path(root).resolve() == TARGET_AGENT_DIR.resolve()
+
+
 def run(ctx: dict[str, Any]) -> str:
     """Pipeline stage 5. Returns a one-line summary for the run log."""
+    folder = Path(ctx.get("folder") or Path("outputs") / ctx.get("name", "agent"))
     specs = load_test_specs(ctx)
+    generated = ""
+    if not specs:
+        specs = generate_specs(ctx, folder)
+        generated = f"generated {len(specs)} seed test(s); " if specs else ""
     if not specs:
         return "no test specs yet"
-    folder = Path(ctx.get("folder") or Path("outputs") / ctx.get("name", "agent"))
+    ctx["test_specs"] = specs
+    if not can_run_agent(ctx):
+        return f"{generated}not run: no adapter for this agent yet (EH-4)"
     traces_dir = folder / "traces"
     traces_dir.mkdir(parents=True, exist_ok=True)
     backend_factory: BackendFactory = ctx.get("backend_factory") or TravelAgentBackend
@@ -181,9 +215,11 @@ def run(ctx: dict[str, Any]) -> str:
     ctx["test_specs"] = specs
     ctx["traces"] = all_traces
     ctx["test_run"] = run_record
-    detail = (f"{ran} test(s) x {repeats} run(s): {totals['completed']} completed, "
+    detail = (f"{generated}{ran} test(s) x {repeats} run(s): {totals['completed']} completed, "
               f"{totals['crashed']} crashed, {totals['timeout']} timed out")
-    detail += f"; {skipped} not run" if skipped else ""
+    if skipped:
+        reason = "" if sim.note or sim.simulator else " (unscripted tests need the user simulator)"
+        detail += f"; {skipped} not run{reason}"
     return detail + (f"; {sim.note}" if sim.note else "")
 
 
@@ -215,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         "spec": {"run_config": {"repeats": args.repeats}},
         "use_llm": not args.no_llm,
         "simulator_cache": not args.no_cache,
+        "backend_factory": TravelAgentBackend,
     }
     print(run(ctx))
     print(f"traces and test_run.json saved in {args.out}")
