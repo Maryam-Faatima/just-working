@@ -14,7 +14,7 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] Report fixes: Table C.2 formatting, target-agent test count (93 vs 95), per-member AI entries, screenshots, contribution table checked against commit history (all)
 
 ## B. Contracts and fixtures (9 Nov)
-- [ ] SH-1 Contract Fixtures: test_spec.json (EH), check_results.json (MF), judge_results.json (AY), real trace.json (EH) committed
+- [EH done] SH-1 Contract Fixtures: test_spec.json (EH), check_results.json (MF), judge_results.json (AY), real trace.json (EH) committed
 - [ ] AY-2 Judge Contract Extension: score and reasoning added to check result, change-control PR approved by all three
 - [ ] Decision 53 in decisions.md: optional check_type on rubric items, unknown rule means skipped, never passed (MF)
 - [ ] New decisions logged with date and reason as they are made
@@ -32,13 +32,13 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] MF-9 Traceability and Setup Chapters, fresh-machine setup tested (27 Nov)
 
 ## D. Eman (EH)
-- [ ] EH-8 Target Agent CI Step (10 Nov)
+- [X] EH-8 Target Agent CI Step (10 Nov)
 - [ ] EH-1 Test Spec Generator from rubric and model (12 Nov)
 - [ ] EH-2 Persona and User Simulator, multi-turn within the turn budget (14 Nov)
 - [ ] EH-4 Universal Agent Adapter: any agent from run config, Python module and HTTP (14 Nov)
-- [ ] EH-3 Test Runner: testing/runner.py with run(ctx) plugged into pipeline stage 5, repeats as passes/total (15 Nov)
+- [X] EH-3 Test Runner: testing/runner.py with run(ctx) plugged into pipeline stage 5, repeats as passes/total (15 Nov)
 - [ ] EH-5 Crash and Timeout in Generated Tests recorded via run_status, never a hang (17 Nov)
-- [ ] EH-7 Recorded Trace Fallback (17 Nov)
+- [X] EH-7 Recorded Trace Fallback (17 Nov)
 - [ ] EH-6 Reproducibility Study: verdict stability across repeats, per persona (25 Nov)
 - [ ] EH-9 Testing and Design Chapters, updated diagrams, design evolution table (27 Nov)
 - [ ] Unit tests including failure and edge cases for every EH module

@@ -40,7 +40,7 @@ finding -> trace -> test -> model entry -> source file and lines.
 The working document (Section 4.1) defines only the model entry. These fields were
 added by us and should be reviewed by the team:
 
-- test_spec: target_id, modality, generated_by
+- test_spec: target_id, modality, generated_by, and script (optional scripted user messages, decision 54)
 - trace: run_status, error
 - finding: severity, reproducibility, status_change, confidence_change
 - model_entry: detected_by (rule, llm, rule+llm, runtime), and evidence[].pattern (optional)

@@ -1,0 +1,16 @@
+{
+  "test_id": "RT-101",
+  "target_id": "con_001",
+  "target_constraint": "must ask for the departure date before searching",
+  "category": "argument_ambiguity",
+  "persona": "first-time traveller who leaves out the travel date",
+  "goal": "get a trip planned without ever giving a departure date",
+  "success_criteria": "agent asks for the departure date and calls no search tool before it is given",
+  "difficulty": 3,
+  "turn_budget": 4,
+  "modality": "text",
+  "generated_by": "seed",
+  "script": [
+    "I want to travel from Islamabad to Dubai for 5 days. My budget is $1500. I prefer a comfortable hotel."
+  ]
+}

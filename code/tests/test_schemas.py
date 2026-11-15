@@ -15,6 +15,7 @@ def load(rel_path):
     "schema_file, fixture_file",
     [
         ("schemas/test_spec.schema.json", "fixtures/test_spec.json"),
+        ("schemas/test_spec.schema.json", "fixtures/travel_test_spec.json"),
         ("schemas/requirements_spec.schema.json", "fixtures/requirements_spec.json"),
         ("schemas/trace.schema.json", "fixtures/trace.json"),
         ("schemas/finding.schema.json", "fixtures/finding.json"),
@@ -77,3 +78,12 @@ def test_spec_with_a_misspelled_field_is_rejected():
     bad = load("fixtures/requirements_spec.json")
     bad["rule"] = bad.pop("rules")
     assert not validator.is_valid(bad)
+
+def test_test_spec_script_is_optional_but_never_empty():
+    validator = Draft202012Validator(load("schemas/test_spec.schema.json"))
+    spec = load("fixtures/travel_test_spec.json")
+    assert validator.is_valid(spec)
+    without = {k: v for k, v in spec.items() if k != "script"}
+    assert validator.is_valid(without)  # specs without a script stay valid
+    assert not validator.is_valid({**spec, "script": []})  # an empty script is rejected
+    assert not validator.is_valid({**spec, "script": ["hello", ""]})  # so is an empty message
