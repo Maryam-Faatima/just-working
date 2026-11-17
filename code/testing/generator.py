@@ -20,6 +20,7 @@ persona and goal. Adaptive tests chosen from results come later (Iteration 3).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,25 @@ CATEGORY_PERSONA = {
     "argument_ambiguity": "vague user who leaves out important details",
     "distraction": "chatty user who drifts to unrelated topics",
 }
+
+
+LABEL = re.compile(r"^(?:[A-Z][A-Z ]{2,}[.:]\s*)+")
+PARENS = re.compile(r"\s*\([^)]*\)?")
+LEAD_IN = re.compile(r"^(?:developer states\s+)?(?:the\s+)?agent\s+can:?\s*", re.IGNORECASE)
+
+
+def clean_description(text: str) -> str:
+    """A tool description as plain words: first sentence, without ALL-CAPS labels, bracketed notes
+    or a leading "Agent can" / "Developer states the agent can:"."""
+    text = LEAD_IN.sub("", PARENS.sub("", LABEL.sub("", (text or "").strip())))
+    first = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0].strip().rstrip(".")
+    return first[:1].lower() + first[1:] if first else ""
+
+
+def _stems(text: str) -> set[str]:
+    """Rough word stems (first 5 letters of words longer than 3), so budget matches budgets."""
+    words = re.findall(r"[a-z]+", text.replace("_", " ").lower())
+    return {w[:5] for w in words if len(w) > 3}
 
 
 def _persona(category: str, behaviors: list[str], index: int) -> str:
@@ -68,11 +88,10 @@ def _spec(test_id: str, target_id: str, category: str, persona: str, goal: str, 
 
 def _capability_for(text: str, capabilities: list[dict[str, Any]]) -> dict[str, Any] | None:
     """The capability whose name or description shares the most words with `text`."""
-    words = {w.strip(".,'\"").lower() for w in text.split() if len(w) > 3}
+    words = _stems(text)
     best, best_score = None, 0
     for cap in capabilities:
-        cap_words = set(f"{cap.get('name', '')} {cap.get('description', '')}".replace("_", " ").lower().split())
-        score = len(words & cap_words)
+        score = len(words & _stems(f"{cap.get('name', '')} {cap.get('description', '')}"))
         if score > best_score:
             best, best_score = cap, score
     return best or (capabilities[0] if capabilities else None)
@@ -105,13 +124,15 @@ def generate(rubric: dict[str, Any] | None, entries: list[dict[str, Any]],
             criteria=f"the agent keeps to the rule: {rule}",
             difficulty=SEVERITY_DIFFICULTY.get(item.get("severity"), 5), target_constraint=rule))
 
-    # 2. one test per capability: check that it works
+    # 2. one test per capability: check that it works, in the way the agent is meant to be used
+    purpose = (spec.get("purpose") or rubric.get("purpose") or "").strip().rstrip(".")
     for cap in capabilities:
-        what = cap.get("description") or cap["name"]
+        what = clean_description(cap.get("description", "")) or f"use {cap['name']}"
+        goal = (f"get help with what the agent is for ({purpose}), in a way that needs it to {what}"
+                if purpose else f"make a normal request that needs the agent to {what}")
         tests.append(_spec(
-            next_id(), cap["id"], "functional", CATEGORY_PERSONA["functional"],
-            goal=f"use the agent for this: {what}",
-            criteria=f"the agent does it ({cap['name']}) and answers correctly", difficulty=2))
+            next_id(), cap["id"], "functional", CATEGORY_PERSONA["functional"], goal=goal,
+            criteria=f"the agent uses {cap['name']} and its answer reflects what it found", difficulty=2))
 
     # 3. one test per weak spot the developer named: lean on it
     for weak in spec.get("weak_spots", []):
