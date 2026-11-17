@@ -6,6 +6,7 @@ import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
 import { EvidenceGraphView } from './components/EvidenceGraphView';
+import { TestRunsView } from './components/TestRunsView';
 import { RequirementsQuestionnaireView } from './components/RequirementsQuestionnaireView';
 import {
   checkBackendHealth,
@@ -17,6 +18,8 @@ import {
   fetchAgentModel,
   fetchAgentEvidence,
   fetchAgentReport,
+  fetchAgentTests,
+  fetchAgentTestRun,
   triggerPipelineRun,
   fetchAgentStatus
 } from './services/api';
@@ -28,6 +31,7 @@ const SCREENS = [
   { id: 'scan', label: 'AST Scan & Tools' },
   { id: 'callgraph', label: 'Call Graph' },
   { id: 'model', label: 'Behavioral Model V0' },
+  { id: 'test', label: 'Test Runs' },
   { id: 'evidence', label: 'Evidence Graph' }
 ];
 
@@ -47,6 +51,8 @@ function App() {
   const [modelData, setModelData] = useState(null);
   const [evidenceData, setEvidenceData] = useState(null);
   const [reportData, setReportData] = useState(null);
+  const [testsData, setTestsData] = useState(null);
+  const [testRunData, setTestRunData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [runStatusMessage, setRunStatusMessage] = useState(null);
 
@@ -72,7 +78,7 @@ function App() {
     if (!agentName) return;
     setIsLoading(true);
     try {
-      const [sum, sp, rub, scn, cg, mdl, evd, rpt] = await Promise.all([
+      const [sum, sp, rub, scn, cg, mdl, evd, rpt, tst, trun] = await Promise.all([
         fetchAgentSummary(agentName),
         fetchAgentSpec(agentName),
         fetchAgentRubric(agentName),
@@ -80,7 +86,9 @@ function App() {
         fetchAgentCallgraph(agentName),
         fetchAgentModel(agentName),
         fetchAgentEvidence(agentName),
-        fetchAgentReport(agentName)
+        fetchAgentReport(agentName),
+        fetchAgentTests(agentName),
+        fetchAgentTestRun(agentName)
       ]);
 
       setSummaryData(sum);
@@ -91,6 +99,8 @@ function App() {
       setModelData(mdl);
       setEvidenceData(evd);
       setReportData(rpt);
+      setTestsData(tst);
+      setTestRunData(trun);
       setCurrentAgent(agentName);
       setHasLoadedAgent(true);
     } catch (err) {
@@ -502,6 +512,14 @@ function App() {
                 {currentScreenId === 'model' && (
                   <BehavioralModelView
                     modelData={modelData}
+                  />
+                )}
+
+                {currentScreenId === 'test' && (
+                  <TestRunsView
+                    testsData={testsData}
+                    testRunData={testRunData}
+                    currentAgent={currentAgent}
                   />
                 )}
 

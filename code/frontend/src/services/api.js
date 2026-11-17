@@ -147,3 +147,23 @@ export async function fetchAgentReport(agentName) {
 }
 
 
+
+// ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
+
+export async function fetchAgentTests(agentName) {
+  const res = await fetch(`${API_BASE}/tests/${agentName}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentTestRun(agentName) {
+  const res = await fetch(`${API_BASE}/test-run/${agentName}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentTrace(agentName, traceFile) {
+  const res = await fetch(`${API_BASE}/traces/${agentName}/${encodeURIComponent(traceFile)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}

@@ -2,6 +2,8 @@
 
 The pipeline calls run(ctx) as stage 5 ("test"). If there are no test specs yet, the seed generator
 (EH-1) writes them from the rubric and the model into <output folder>/test_specs.json first.
+The agent is reached through the universal adapter (EH-4, testing/backends.py), chosen from the
+Phase 0 run config; the travel agent in target_agent/ keeps its own backend.
 For each test spec the runner:
 
 1. checks the spec against schemas/test_spec.schema.json (an invalid spec is reported, not run);
@@ -32,7 +34,8 @@ from typing import Any
 
 import jsonschema
 
-from testing.adapter import REPO_ROOT, TARGET_AGENT_DIR, Adapter, Backend, TravelAgentBackend
+from testing.adapter import REPO_ROOT, Adapter, Backend, TravelAgentBackend
+from testing.backends import choose_backend
 from testing.generator import generate
 from testing.simulator import SimulatorUnavailable, UserSimulator
 
@@ -172,17 +175,6 @@ def generate_specs(ctx: dict[str, Any], folder: Path) -> list[dict[str, Any]]:
     return specs
 
 
-def can_run_agent(ctx: dict[str, Any]) -> bool:
-    """True if the runner can start this agent: a backend was given, or it is the travel agent.
-
-    Until the universal adapter (EH-4) exists, only the travel agent in target_agent/ can be run.
-    """
-    if ctx.get("backend_factory"):
-        return True
-    root = ctx.get("repo_root")
-    return root is not None and Path(root).resolve() == TARGET_AGENT_DIR.resolve()
-
-
 def run(ctx: dict[str, Any]) -> str:
     """Pipeline stage 5. Returns a one-line summary for the run log."""
     folder = Path(ctx.get("folder") or Path("outputs") / ctx.get("name", "agent"))
@@ -194,11 +186,12 @@ def run(ctx: dict[str, Any]) -> str:
     if not specs:
         return "no test specs yet"
     ctx["test_specs"] = specs
-    if not can_run_agent(ctx):
-        return f"{generated}not run: no adapter for this agent yet (EH-4)"
+    backend_factory, how = choose_backend(ctx)
+    if backend_factory is None:
+        return f"{generated}not run: {how}"
+    ctx["backend"] = how
     traces_dir = folder / "traces"
     traces_dir.mkdir(parents=True, exist_ok=True)
-    backend_factory: BackendFactory = ctx.get("backend_factory") or TravelAgentBackend
     repeats = repeats_for(ctx)
     sim = SimulatorState(make_simulator(ctx))
 
@@ -243,6 +236,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-llm", action="store_true", help="scripts only, no user simulator")
     parser.add_argument("--no-cache", action="store_true",
                         help="fresh simulator replies on every run (for the reproducibility study, EH-6)")
+    parser.add_argument("--agent-dir", help="folder of the agent to test (default: the travel agent)")
+    parser.add_argument("--entry-point", help="file.py:function or module:function, or a URL with --interface http")
+    parser.add_argument("--interface", choices=["python_module", "http"], default="python_module")
     args = parser.parse_args(argv)
     data = json.loads(Path(args.specs).read_text(encoding="utf-8"))
     ctx: dict[str, Any] = {
@@ -251,8 +247,12 @@ def main(argv: list[str] | None = None) -> int:
         "spec": {"run_config": {"repeats": args.repeats}},
         "use_llm": not args.no_llm,
         "simulator_cache": not args.no_cache,
-        "backend_factory": TravelAgentBackend,
     }
+    if args.entry_point:
+        ctx["spec"]["run_config"].update(entry_point=args.entry_point, interface=args.interface)
+        ctx["repo_root"] = Path(args.agent_dir or ".").resolve()
+    else:
+        ctx["backend_factory"] = TravelAgentBackend
     print(run(ctx))
     print(f"traces and test_run.json saved in {args.out}")
     return 0
