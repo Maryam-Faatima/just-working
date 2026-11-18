@@ -8,6 +8,7 @@ from understand.model_store import (
     ModelStore,
     build_v0,
     update_confidence,
+    MAX_CONFIDENCE
 )
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "model_v0.json"
@@ -123,3 +124,9 @@ def test_save_load_roundtrip(tmp_path):
 def test_fixture_loads_and_next_id_follows_highest():
     model = ModelStore.load(FIXTURE)
     assert model.next_id("capability") == "cap_005"
+
+def test_confidence_never_exceeds_the_cap():
+    c = 0.9
+    for _ in range(50):
+        c = update_confidence(c, "confirmed")
+    assert c == MAX_CONFIDENCE == 0.95

@@ -6,7 +6,7 @@ LLM_ONLY = 0.55
 RUNTIME_DISCOVERED = 0.70
 DEVELOPER_STATED = 0.60
 AGREEMENT_BONUS = 0.05
-MAX_BASELINE = 0.97
+MAX_BASELINE = 0.95
 
 
 def baseline_confidence(detected_by, pattern=None):

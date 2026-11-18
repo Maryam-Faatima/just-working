@@ -23,8 +23,10 @@ reconcile(store, spec, runs, finding_id=None)
 | Run crashed or timed out | none | None. A critical finding is still written |
 | Agent called a tool the model lacks | discovered entry added | New entry, status discovered, runtime evidence |
 
-With several runs, passing runs are applied first and failing runs last, so one failure always
-leaves the entry contradicted. This matches the rubric: a test fails if any critical item fails.
+With several runs, a failure always wins. If any run failed, only the failing runs move
+confidence, one step down each from the entry's original value. Passing runs are kept as
+runtime evidence but cannot offset the failure, so a contradicted entry never ends up more
+trusted than it started. This matches the rubric: a test fails if any critical item fails.
 
 ## Finding
 Built to finding.schema.json and validated before it is returned.
@@ -50,4 +52,5 @@ This updates model_v0.json in place (version set to v1) and prints the finding.
 - Reconciliation trusts the check results it is given. It does not judge conversations itself.
 - Only the targeted entry is updated. Constraints the LLM found in the code are also entries, so a test for one of them should target its own entry, not the capability.
 - One test spec is reconciled at a time. Choosing what to test next is a separate step.
-- Confidence steps use the fixed rates in confidence.py. They are not yet tuned on data.
+- Confidence steps use the fixed rates in model_store.py and are capped at 0.95. The score is a
+  heuristic, not a probability, and the rates are not yet tuned on data (MF-5).

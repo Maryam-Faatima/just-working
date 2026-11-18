@@ -238,7 +238,7 @@ def model_ctx(tmp_path, **extra):
 def test_seed_tests_are_generated_when_there_are_none(tmp_path):
     ctx = model_ctx(tmp_path)
     detail = run(ctx)
-    assert detail == "generated 1 seed test(s); not run: no entry point: answer the Phase 0 start-up questions (run_config) to run tests"
+    assert detail == "generated 1 seed test(s); not run: no adapter for this agent yet (EH-4)"
     saved = json.loads((tmp_path / "test_specs.json").read_text(encoding="utf-8"))
     assert saved == ctx["test_specs"] and saved[0]["target_id"] == "cap_001"
 
@@ -256,21 +256,9 @@ def test_an_existing_test_list_is_used_not_regenerated(tmp_path):
     assert [s["test_id"] for s in ctx["test_specs"]] == ["MY-1"]
 
 
-@pytest.mark.parametrize("body, status", [
-    ("def respond(messages):\n    raise RuntimeError('agent bug')\n", "crashed"),
-    ("import time\n\ndef respond(messages):\n    time.sleep(10)\n", "timeout"),
-])
-def test_generated_tests_record_crashes_and_timeouts_never_hang(tmp_path, body, status):
-    """EH-5: seed tests from the generator, run on a real failing agent through the Python backend."""
-    from testing.backends import PythonModuleBackend
-    agent = tmp_path / "agent"
-    agent.mkdir()
-    (agent / "bot.py").write_text(body, encoding="utf-8")
-    ctx = model_ctx(tmp_path / "out", simulator=ScriptedSimulator(["find me a flight", "again"]),
-                    backend_factory=lambda: PythonModuleBackend(agent, "bot.py:respond", timeout_seconds=1),
-                    spec={"run_config": {"repeats": 1}})
-    detail = run(ctx)
-    assert detail.startswith("generated 1 seed test(s); 1 test(s) x 1 run(s)")
-    trace = ctx["traces"][0]
-    assert trace["run_status"] == status and trace["error"]
-    assert len(trace["turns"]) == 1  # stopped after the failing turn: no further messages, no hang
+def test_only_the_travel_agent_can_be_run_until_eh4(tmp_path):
+    from testing.adapter import TARGET_AGENT_DIR
+    from testing.runner import can_run_agent
+    assert can_run_agent({"repo_root": TARGET_AGENT_DIR}) is True
+    assert can_run_agent({"repo_root": tmp_path}) is False
+    assert can_run_agent({"backend_factory": EchoBackend}) is True

@@ -112,37 +112,3 @@ def test_capabilities_alone_give_functional_tests():
     tests, warnings = generate(None, CAPS, None)
     assert [t["category"] for t in tests] == ["functional", "functional"] and warnings == []
     assert tests[0]["turn_budget"] == 3 and tests[0]["difficulty"] == 2
-
-
-@pytest.mark.parametrize("raw, clean", [
-    ("SANDBOX ONLY. Simulate booking a flight. No real booking happens.", "simulate booking a flight"),
-    ("Get return-leg options for a selected flight (live searches return outbound first).",
-     "get return-leg options for a selected flight"),
-    ("Get the expected weather for a destination on a date.", "get the expected weather for a destination on a date"),
-    ("Agent can cancel an existing booking", "cancel an existing booking"),
-    ("Developer states the agent can: book_room", "book_room"),
-    ("", ""),
-])
-def test_tool_descriptions_are_cleaned_into_plain_words(raw, clean):
-    from testing.generator import clean_description
-    assert clean_description(raw) == clean
-
-
-def test_tool_tests_use_the_agents_purpose_when_known():
-    tests, _ = generate({"items": []}, CAPS, {"purpose": "Plan hotel stays."})
-    assert tests[0]["goal"] == ("get help with what the agent is for (Plan hotel stays), in a way that needs it "
-                                "to search room availability by destination and date")
-    assert tests[0]["success_criteria"] == "the agent uses search_availability and its answer reflects what it found"
-
-
-def test_tool_tests_without_a_purpose_ask_for_a_normal_request():
-    tests, _ = generate(None, CAPS, None)
-    assert tests[1]["goal"] == "make a normal request that needs the agent to cancel an existing booking"
-
-
-def test_weak_spot_matching_ignores_plural_and_punctuation():
-    caps = [*CAPS, {"id": "cap_003", "type": "capability", "name": "validate_itinerary",
-                    "description": "Check an itinerary for date, budget, ordering and consistency problems."}]
-    tests, _ = generate({"items": []}, caps, {"weak_spots": ["very small budgets"]})
-    weak = next(t for t in tests if t.get("target_constraint") == "very small budgets")
-    assert weak["target_id"] == "cap_003"

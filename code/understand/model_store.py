@@ -26,7 +26,7 @@ CONFIRM_RATE = 0.30
 CONTRADICT_RATE = 0.50
 UNREACHABLE_RATE = 0.20
 MIN_CONFIDENCE = 0.01
-MAX_CONFIDENCE = 0.99
+MAX_CONFIDENCE = 0.95
 
 
 class ModelError(ValueError):
@@ -119,6 +119,14 @@ class ModelStore:
             if trace_id:
                 item["trace_id"] = trace_id
             updated["evidence"].append(item)
+        validate_entry(updated)
+        self.entries[entry_id] = updated
+        return updated
+    
+    def add_evidence(self, entry_id, test_id, trace_id):
+        """Record a run as runtime evidence without changing status or confidence."""
+        updated = copy.deepcopy(self.get(entry_id))
+        updated["evidence"].append({"source": "runtime", "test_id": test_id, "trace_id": trace_id})
         validate_entry(updated)
         self.entries[entry_id] = updated
         return updated
