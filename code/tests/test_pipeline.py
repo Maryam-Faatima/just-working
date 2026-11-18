@@ -60,12 +60,12 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     assert not (folder / "spec.json").exists()  # no spec, so no spec copy
     assert summary["ok"] is True
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
-                                 "infer": "skipped", "test": "ok", "report": "ok"}
+                             "infer": "skipped", "test": "ok", "check": "ok", "report": "ok"}
     test_stage = next(r for r in summary["stages"] if r["stage"] == "test")
     # the generator (EH-1) writes one test per tool; only the travel agent can be run until EH-4
     assert test_stage["detail"] == "generated 2 seed test(s); not run: no adapter for this agent yet (EH-4)"
     assert len(json.loads((folder / "test_specs.json").read_text(encoding="utf-8"))) == 2
-    assert len(lines) == 7
+    assert len(lines) == len(summary["stages"])
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
     assert {e["name"] for e in model["entries"]} == {"search_things", "delete_thing"}
 
