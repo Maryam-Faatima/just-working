@@ -1,7 +1,8 @@
 """LLM Judge (AY-1): score agent conversation quality on a 1-to-5 scale with reasoning.
 
 The judge works for ANY LangGraph agent regardless of domain, size, or purpose.
-It receives a trace and the rubric items whose check field is "judge", and scores the
+It receives a trace and the rubric items whose check field is "judge" (and that have no
+check_type), and scores the
 overall response quality for each. It never repeats the binary rule evaluation that
 testing/checks.py already did for deterministic items (confirm_before, call_order,
 never_call, no_crash_or_empty).
@@ -241,8 +242,12 @@ def run_judge(
         isinstance(t, dict) and t.get("role") == "agent" for t in turns
     )
 
-    # Rubric items explicitly delegated to the judge only
-    judge_items = [it for it in rubric.get("items", []) if it.get("check") == "judge"]
+    # Only rules delegated to the judge. A rule with a check_type was decided by a program in
+    # testing/checks.py, so the judge does not read it again (Decision 62).
+    judge_items = [
+        it for it in rubric.get("items", [])
+        if it.get("check") == "judge" and not it.get("check_type")
+    ]
 
     # Why the LLM is not used, if it is not. Checked once, so a dead LLM costs one call, not N.
     skip_reason = None

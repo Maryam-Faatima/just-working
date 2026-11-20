@@ -615,11 +615,9 @@ def run_judge_endpoint(name: str, payload: JudgeRequest):
         raise HTTPException(status_code=400, detail="No trace data provided to evaluate.")
     _check_trace(trace_data)
 
-    # 1. Run LLM Judge
-    judge_res = judge.run_judge(trace_data, rubric, use_llm=payload.use_llm)
-
-    # 2. Run Deterministic Checks (testing/checks.py) for comparison
+    # 1. Rule checks first (testing/checks.py), 2. then the judge's quality scores (Decision 62)
     checks_res = checks.run_checks(trace_data, rubric, use_llm=payload.use_llm)
+    judge_res = judge.run_judge(trace_data, rubric, use_llm=payload.use_llm)
 
     # Persist results in agent output directory
     (agent_dir / "judge_results.json").write_text(
@@ -668,8 +666,8 @@ def get_judge_results(name: str):
         try:
             rubric = json.loads(rubric_file.read_text(encoding="utf-8"))
             trace = json.loads(rec_good.read_text(encoding="utf-8"))
-            judge_res = judge.run_judge(trace, rubric, use_llm=True)
             checks_res = checks.run_checks(trace, rubric, use_llm=True)
+            judge_res = judge.run_judge(trace, rubric, use_llm=True)
             judge_file.write_text(json.dumps(judge_res, indent=2), encoding="utf-8")
             checks_file.write_text(json.dumps(checks_res, indent=2), encoding="utf-8")
             return {

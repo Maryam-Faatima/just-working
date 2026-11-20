@@ -179,6 +179,16 @@ def test_deterministic_items_excluded_from_rule_scores():
     assert "U2" in rule_ids       # judge item — present
 
 
+def test_judge_items_with_a_check_type_are_left_to_checks_py():
+    """check_type means a program decided the rule (Decision 62), so the judge does not read it."""
+    typed = item("U5", description="never cancel without asking")
+    typed["check_type"] = "confirm_before"
+    fake = FakeLLM(reply={"score": 5, "reasoning": "ok"})
+    result = run_judge(trace([user(1, "hi"), agent_turn(2, "hello")]),
+                       rubric(items=[typed, item("U2")]), complete_json=fake, use_llm=True)
+    assert [r["rule_id"] for r in result["rule_scores"]] == ["U2"]
+
+
 # ---------------------------------------------------------------------- fake LLM pass/fail/weak
 
 def test_fake_llm_pass_score():
