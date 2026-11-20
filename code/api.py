@@ -7,6 +7,7 @@ and inspect all generated outputs (spec, rubric, scan, callgraph, model).
 """
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -357,3 +358,44 @@ def get_report(name: str):
         return {"agent": name, "report": file_path.read_text(encoding="utf-8")}
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read report.md: {exc}") from exc
+
+
+# ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
+
+TRACE_FILE = re.compile(r"^[A-Za-z0-9_.-]+_run\d+\.json$")
+
+
+def _read_json(file_path: Path, label: str):
+    try:
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read {label}: {exc}") from exc
+
+
+@app.get("/api/tests/{name}")
+def get_tests(name: str):
+    """Return the test specs (seed tests from the generator, or hand-written ones)."""
+    file_path = _agent_dir(name) / "test_specs.json"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Test specs for agent '{name}' not found.")
+    return _read_json(file_path, "test_specs.json")
+
+
+@app.get("/api/test-run/{name}")
+def get_test_run(name: str):
+    """Return the runner's summary: runs per test, completed, crashed, timed out."""
+    file_path = _agent_dir(name) / "test_run.json"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Test run for agent '{name}' not found.")
+    return _read_json(file_path, "test_run.json")
+
+
+@app.get("/api/traces/{name}/{trace_file}")
+def get_trace(name: str, trace_file: str):
+    """Return one saved conversation. Only names like RT-101_run1.json are accepted."""
+    if not TRACE_FILE.match(trace_file):
+        raise HTTPException(status_code=400, detail="Bad trace file name.")
+    file_path = _agent_dir(name) / "traces" / trace_file
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Trace '{trace_file}' not found.")
+    return _read_json(file_path, trace_file)

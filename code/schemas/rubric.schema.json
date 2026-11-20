@@ -31,7 +31,8 @@
           "source": { "enum": ["developer", "default"] },
           "target_id": { "type": "string", "pattern": "^con_[0-9]{3}$" },
           "applies_to": { "type": "array", "items": { "type": "string" } },
-          "check_type": { "enum": ["confirm_before", "search_before", "never_call", "no_crash_or_empty"] }
+          "check_type": { "enum": ["confirm_before", "call_order", "never_call", "no_crash_or_empty"] },
+          "phrases": { "type": "array", "items": { "type": "string", "minLength": 1 } }
         },
         "additionalProperties": false
       }

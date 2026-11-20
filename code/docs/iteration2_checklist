@@ -15,12 +15,12 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 
 ## B. Contracts and fixtures (9 Nov)
 - [EH done] SH-1 Contract Fixtures: test_spec.json (EH), check_results.json (MF), judge_results.json (AY), real trace.json (EH) committed
-- [ ] AY-2 Judge Contract Extension: score and reasoning added to check result, change-control PR approved by all three
-- [ ] Decision 53 in decisions.md: optional check_type on rubric items, unknown rule means skipped, never passed (MF)
+- [ ] AY-2 Judge Contract Extension: agree the shared check result fields (score 1 to 5, verdict, method, reasoning, already in testing/checks.py) and the rubric fields check_type and phrases; one change-control PR approved by all three (AY, MF)
+- [ ] Decision 53 in decisions.md: optional check_type and phrases on rubric items, undecided rule scores 3 (weak), never skipped and never a failure, rules without a program check are read by the LLM (MF)
 - [ ] New decisions logged with date and reason as they are made
 
 ## C. Maryam (MF)
-- [ ] MF-1 Trace Check Engine: testing/checks.py, tests/test_checks.py, docs/checks.md (9 Nov)
+- [ ] MF-1 Trace Check Engine: any agent, static checks plus LLM read of any other rule: testing/checks.py, tests/test_checks.py, docs/checks.md (9 Nov, late)
 - [ ] MF-1 ruff and pytest green, PR reviewed by EH
 - [ ] MF-2 Checks CLI: python -m testing.checks trace.json rubric.json (10 Nov)
 - [ ] MF-8 Cached V0 Fallback saved and used by the offline demo (12 Nov)
@@ -33,7 +33,7 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 
 ## D. Eman (EH)
 - [X] EH-8 Target Agent CI Step (10 Nov)
-- [ ] EH-1 Test Spec Generator from rubric and model (12 Nov)
+- [X] EH-1 Test Spec Generator from rubric and model (12 Nov)
 - [X] EH-2 Persona and User Simulator, multi-turn within the turn budget (14 Nov)
 - [ ] EH-4 Universal Agent Adapter: any agent from run config, Python module and HTTP (14 Nov)
 - [X] EH-3 Test Runner: testing/runner.py with run(ctx) plugged into pipeline stage 5, repeats as passes/total (15 Nov)
@@ -45,7 +45,7 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 
 ## E. Aliza (AY)
 - [ ] AY-1 LLM Judge: testing/judge.py, 1 to 5 scores with reasoning, below 3 fail, 3 weak, cached, fails safely if LLM is down (14 Nov)
-- [ ] Deterministic checks run before the judge
+- [ ] Deterministic checks (testing/checks.py) run before the judge; judge.py scores quality 1 to 5 with reasoning and does not repeat the pass or fail reading of rules that checks.py already did
 - [ ] AY-3 Real Findings in Evidence Graph: finding to trace to test to model entry to code (17 Nov)
 - [ ] AY-4 Report on Real Runs: coverage, severity, reproducibility, model changes (18 Nov)
 - [ ] AY-5 UI on Real Runs: SIMULATION label removed, PDF download works on real findings (19 Nov)
