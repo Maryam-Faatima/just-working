@@ -1,0 +1,1 @@
+{"provider": "groq", "text": "{\"score\":3,\"reasoning\":\"The conversation contains no cancellation actions, so the rule about confirming before cancelling bookings did not arise.\"}"}
