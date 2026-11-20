@@ -16,6 +16,8 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from jsonschema import Draft202012Validator
+
 from pipeline import run_pipeline
 from testing import checks, generator, judge
 from understand import phase0
@@ -412,6 +414,39 @@ def get_report(name: str):
 # ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
 
 TRACE_FILE = re.compile(r"^[A-Za-z0-9_.-]+_run\d+\.json$")
+FIXTURE_TRACES = {
+    "trace_good.json": BASE_DIR / "fixtures" / "recorded" / "trace_good.json",
+    "trace.json": BASE_DIR / "fixtures" / "trace.json",
+    "fixtures/recorded/trace_good.json": BASE_DIR / "fixtures" / "recorded" / "trace_good.json",
+    "fixtures/trace.json": BASE_DIR / "fixtures" / "trace.json",
+}
+_TRACE_VALIDATOR = Draft202012Validator(
+    json.loads((BASE_DIR / "schemas" / "trace.schema.json").read_text(encoding="utf-8"))
+)
+
+
+def _trace_path(name: str, trace_file: str) -> Path:
+    """File of one saved trace. Only a plain file name inside this agent's traces/ folder, or one of
+    the committed fixture names, is accepted. Anything else (../, absolute paths, other folders) is a 400."""
+    if trace_file in FIXTURE_TRACES:
+        agent_file = _agent_dir(name) / "traces" / trace_file
+        return agent_file if agent_file.is_file() else FIXTURE_TRACES[trace_file]
+    if "/" in trace_file or "\\" in trace_file or trace_file.startswith(".") or not trace_file.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Bad trace file name.")
+    traces_dir = (_agent_dir(name) / "traces").resolve()
+    path = (traces_dir / trace_file).resolve()
+    if not path.is_relative_to(traces_dir):
+        raise HTTPException(status_code=400, detail="Bad trace file name.")
+    return path
+
+
+def _check_trace(trace: Any) -> dict:
+    """The trace must follow schemas/trace.schema.json, otherwise 422 instead of a crash later."""
+    errors = sorted(_TRACE_VALIDATOR.iter_errors(trace), key=lambda e: list(e.path))
+    if errors:
+        where = ".".join(str(p) for p in errors[0].path) or "trace"
+        raise HTTPException(status_code=422, detail=f"Invalid trace: {where}: {errors[0].message}")
+    return trace
 
 
 def _read_json(file_path: Path, label: str):
@@ -544,16 +579,8 @@ def get_traces(name: str):
 @app.get("/api/traces/{name}/{trace_file}")
 def get_trace(name: str, trace_file: str):
     """Return one saved conversation. Names like RT-101_run1.json or fixture files are accepted."""
-    file_path = _agent_dir(name) / "traces" / trace_file
-    if not file_path.exists():
-        if trace_file.startswith("fixtures/"):
-            file_path = BASE_DIR / trace_file
-        elif trace_file == "trace_good.json":
-            file_path = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
-        elif trace_file == "trace.json":
-            file_path = BASE_DIR / "fixtures" / "trace.json"
-
-    if not file_path.exists():
+    file_path = _trace_path(name, trace_file)
+    if not file_path.is_file():
         raise HTTPException(status_code=404, detail=f"Trace '{trace_file}' not found.")
     return _read_json(file_path, trace_file)
 
@@ -575,30 +602,18 @@ def run_judge_endpoint(name: str, payload: JudgeRequest):
             detail=f"Rubric for agent '{name}' not found. Run analysis first.",
         )
 
-    rubric = json.loads(rubric_file.read_text(encoding="utf-8"))
+    rubric = _read_json(rubric_file, "rubric.json")
 
     trace_data = payload.trace
     if not trace_data and payload.trace_file:
-        target = agent_dir / "traces" / payload.trace_file
-        if not target.exists():
-            if payload.trace_file.startswith("fixtures/"):
-                target = BASE_DIR / payload.trace_file
-            elif payload.trace_file == "trace_good.json":
-                target = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
-            elif payload.trace_file == "trace.json":
-                target = BASE_DIR / "fixtures" / "trace.json"
-        if target.exists():
-            trace_data = json.loads(target.read_text(encoding="utf-8"))
+        target = _trace_path(name, payload.trace_file)
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"Trace '{payload.trace_file}' not found.")
+        trace_data = _read_json(target, payload.trace_file)
 
     if not trace_data:
-        rec_good = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
-        if rec_good.exists():
-            trace_data = json.loads(rec_good.read_text(encoding="utf-8"))
-
-    if not trace_data:
-        raise HTTPException(
-            status_code=400, detail="No trace data provided to evaluate."
-        )
+        raise HTTPException(status_code=400, detail="No trace data provided to evaluate.")
+    _check_trace(trace_data)
 
     # 1. Run LLM Judge
     judge_res = judge.run_judge(trace_data, rubric, use_llm=payload.use_llm)

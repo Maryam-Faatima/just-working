@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   fetchAgentTestSpecs,
   fetchAgentTraces,
@@ -6,6 +6,14 @@ import {
   fetchAgentJudgeResults,
   runJudgeEvaluation
 } from '../services/api';
+
+// Message content as plain text: strings, null, or LangChain-style content blocks.
+const asText = (v) => {
+  if (typeof v === 'string') return v;
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) return v.map((b) => (typeof b === 'string' ? b : (b && b.text) ?? JSON.stringify(b))).join('\n');
+  return JSON.stringify(v);
+};
 
 export function TestRunsJudgeView({ currentAgent, rubricData }) {
   const [testSpecs, setTestSpecs] = useState([]);
@@ -19,9 +27,21 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
   const [evalError, setEvalError] = useState(null);
   const [selectedSpec, setSelectedSpec] = useState(null);
   const [activeTab, setActiveTab] = useState('judge'); // 'judge' | 'checks' | 'spec'
+  const loadToken = useRef(0); // ignores answers that arrive after the agent was changed
+
+  const ruleText = (id) => rubricData?.items?.find((i) => i.rule_id === id)?.description;
 
   // Load test specs & traces list for current agent
   const loadInitialData = useCallback(async () => {
+    const token = ++loadToken.current;
+    // Nothing from the previous agent may stay on screen or be sent to this agent's rubric.
+    setTestSpecs([]);
+    setSelectedSpec(null);
+    setTraces([]);
+    setSelectedTraceId(null);
+    setSelectedTrace(null);
+    setJudgeData(null);
+    setChecksData([]);
     if (!currentAgent) return;
     setIsLoadingTraces(true);
     setEvalError(null);
@@ -31,6 +51,7 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
         fetchAgentTraces(currentAgent),
         fetchAgentJudgeResults(currentAgent).catch(() => null)
       ]);
+      if (token !== loadToken.current) return;
 
       setTestSpecs(specs || []);
       if (specs && specs.length > 0) {
@@ -38,21 +59,25 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
       }
 
       setTraces(traceList || []);
+      let firstContent = null;
       if (traceList && traceList.length > 0) {
         const firstTrace = traceList[0];
+        firstContent = await fetchAgentTrace(currentAgent, firstTrace.filename);
+        if (token !== loadToken.current) return;
         setSelectedTraceId(firstTrace.filename);
-        const traceContent = await fetchAgentTrace(currentAgent, firstTrace.filename);
-        setSelectedTrace(traceContent);
+        setSelectedTrace(firstContent);
       }
 
-      if (savedEval) {
+      // Saved results are shown only if they belong to the trace on screen.
+      if (savedEval && savedEval.judge && firstContent && savedEval.judge.trace_id === firstContent.trace_id) {
         setJudgeData(savedEval.judge);
         setChecksData(savedEval.checks || []);
       }
     } catch (err) {
+      if (token === loadToken.current) setEvalError('Could not load test runs for this agent.');
       console.error('Failed to load test runs data:', err);
     } finally {
-      setIsLoadingTraces(false);
+      if (token === loadToken.current) setIsLoadingTraces(false);
     }
   }, [currentAgent]);
 
@@ -62,10 +87,17 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
 
   // Handle trace selection
   const handleSelectTrace = async (traceItem) => {
+    const token = ++loadToken.current;
     setSelectedTraceId(traceItem.filename);
     try {
       const content = await fetchAgentTrace(currentAgent, traceItem.filename);
+      if (token !== loadToken.current) return;
       setSelectedTrace(content);
+      // Judge and check results belong to one trace; drop them when another trace is opened.
+      if (judgeData && judgeData.trace_id !== content?.trace_id) {
+        setJudgeData(null);
+        setChecksData([]);
+      }
     } catch (err) {
       console.error('Failed to fetch trace content:', err);
     }
@@ -271,13 +303,13 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
             Checks Engine
           </div>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: '36px', fontWeight: 900, color: 'var(--ink-primary)', marginTop: '6px' }}>
-            {checksData.length > 0 ? checksData.filter(c => c.passed).length : '—'}
+            {checksData.length > 0 ? checksData.filter(c => c.verdict === 'pass').length : '—'}
             <span style={{ fontSize: '18px', color: 'var(--ink-muted)', fontWeight: 600 }}>
               {checksData.length > 0 ? ` / ${checksData.length}` : ''}
             </span>
           </div>
           <div style={{ fontSize: '11.5px', color: 'var(--ink-secondary)', marginTop: '4px' }}>
-            Deterministic rules passed
+            Rules passed (weak = not decided)
           </div>
         </div>
       </div>
@@ -449,6 +481,12 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
               )}
             </div>
 
+            {selectedTrace && selectedTrace.run_status !== 'completed' && (
+              <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '12.5px', marginBottom: '12px' }}>
+                <strong>Run {selectedTrace.run_status}.</strong> {selectedTrace.error || 'No error message was recorded.'}
+              </div>
+            )}
+
             {/* Conversation Turns List */}
             {selectedTrace && selectedTrace.turns && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '420px', overflowY: 'auto', paddingRight: '6px' }}>
@@ -484,7 +522,7 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                           Turn {turn.turn} · {isUser ? 'User Persona' : 'Agent'}
                         </div>
                         <div style={{ whiteSpace: 'pre-wrap' }}>
-                          {turn.content}
+                          {asText(turn.content)}
                         </div>
                       </div>
 
@@ -524,7 +562,7 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                                   </pre>
                                 </details>
                               )}
-                              {call.result && (
+                              {call.result !== undefined && call.result !== null && (
                                 <details style={{ marginTop: '3px', cursor: 'pointer' }}>
                                   <summary style={{ color: '#92400E', fontSize: '10px', fontWeight: 600 }}>
                                     Return Data Preview
@@ -652,7 +690,7 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                             fontSize: '12px',
                             color: overall.verdict === 'pass' ? '#16A34A' : overall.verdict === 'weak' ? '#92400E' : '#DC2626'
                           }}>
-                            Score: {overall.score}/5 ({overall.verdict.toUpperCase()})
+                            Score: {overall.score}/5 ({String(overall.verdict).toUpperCase()})
                           </span>
                         </div>
                         <div style={{ color: 'var(--ink-secondary)', lineHeight: 1.5 }}>
@@ -698,9 +736,14 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                                   background: isPass ? '#DCFCE7' : isWeak ? '#FEF3C7' : '#FEE2E2',
                                   color: isPass ? '#16A34A' : isWeak ? '#92400E' : '#DC2626'
                                 }}>
-                                  Score {rs.score}/5 · {rs.verdict.toUpperCase()}
+                                  Score {rs.score}/5 · {String(rs.verdict).toUpperCase()}
                                 </span>
                               </div>
+                              {ruleText(rs.rule_id) && (
+                                <div style={{ fontSize: '11.5px', color: 'var(--ink-muted)', fontStyle: 'italic' }}>
+                                  Rule: {ruleText(rs.rule_id)}
+                                </div>
+                              )}
                               <div style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', marginTop: '4px', lineHeight: 1.45 }}>
                                 {rs.reasoning}
                               </div>
@@ -745,6 +788,11 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                           {chk.method}
                         </span>
                       </div>
+                      {ruleText(chk.rule_id) && (
+                        <div style={{ fontSize: '11.5px', color: 'var(--ink-muted)', fontStyle: 'italic', marginTop: '4px' }}>
+                          Rule: {ruleText(chk.rule_id)}
+                        </div>
+                      )}
                       <div style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', marginTop: '4px' }}>
                         {chk.reasoning || chk.description}
                       </div>
@@ -756,11 +804,11 @@ export function TestRunsJudgeView({ currentAgent, rubricData }) {
                       fontWeight: 800,
                       padding: '2px 8px',
                       borderRadius: 'var(--radius-full)',
-                      background: chk.passed ? '#DCFCE7' : '#FEE2E2',
-                      color: chk.passed ? '#16A34A' : '#DC2626',
+                      background: chk.verdict === 'weak' ? '#FEF3C7' : chk.passed ? '#DCFCE7' : '#FEE2E2',
+                      color: chk.verdict === 'weak' ? '#92400E' : chk.passed ? '#16A34A' : '#DC2626',
                       flexShrink: 0
                     }}>
-                      {chk.passed ? 'PASSED' : 'FAILED'}
+                      {chk.verdict === 'weak' ? 'NOT DECIDED' : chk.passed ? 'PASSED' : 'FAILED'}
                     </span>
                   </div>
                 ))}

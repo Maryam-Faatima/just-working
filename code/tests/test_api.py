@@ -113,3 +113,29 @@ def test_judge_endpoint_no_llm():
     assert "judge" in data
     assert "checks" in data
     assert data["judge"]["overall_quality"]["score"] == 3
+
+
+# ---- trace file safety and validation (AY review fixes)
+
+def test_trace_route_rejects_path_traversal():
+    for bad in ("../../../package.json", "..%2F..%2Fpackage.json", "fixtures/../package-lock.json",
+                "/etc/passwd.json", "notes.txt", ".hidden.json"):
+        res = client.get(f"/api/trace/trip-planner-agent/{bad}")
+        assert res.status_code in (400, 404), bad
+
+
+def test_judge_rejects_traversal_in_trace_file():
+    res = client.post("/api/judge/trip-planner-agent",
+                      json={"trace_file": "../../../package.json", "use_llm": False})
+    assert res.status_code in (400, 404)
+
+
+def test_judge_rejects_a_trace_that_breaks_the_schema():
+    res = client.post("/api/judge/trip-planner-agent",
+                      json={"trace": {"trace_id": "x"}, "use_llm": False})
+    assert res.status_code == 422
+
+
+def test_judge_without_any_trace_is_a_400_not_a_silent_fixture():
+    res = client.post("/api/judge/trip-planner-agent", json={"use_llm": False})
+    assert res.status_code == 400
