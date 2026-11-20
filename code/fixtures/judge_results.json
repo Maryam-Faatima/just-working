@@ -1,0 +1,29 @@
+{
+  "trace_id": "TR-J001",
+  "agent": "support-ticket-agent",
+  "overall_quality": {
+    "score": 4,
+    "verdict": "pass",
+    "reasoning": "The agent correctly identified the user's intent, looked up the ticket, explained the status clearly, and offered a reasonable next step. It stayed on-topic and did not reveal any sensitive information from other tickets."
+  },
+  "rule_scores": [
+    {
+      "rule_id": "U2",
+      "score": 5,
+      "verdict": "pass",
+      "passed": true,
+      "severity": "major",
+      "method": "llm",
+      "reasoning": "The user asked only about their own ticket (TK-9981). The agent answered within scope and did not attempt any out-of-scope action."
+    },
+    {
+      "rule_id": "U3",
+      "score": 3,
+      "verdict": "weak",
+      "passed": false,
+      "severity": "minor",
+      "method": "llm",
+      "reasoning": "The user did not provide any missing information, so the ambiguity-handling policy was not exercised in this conversation. Rule not decided."
+    }
+  ]
+}

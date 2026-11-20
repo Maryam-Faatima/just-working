@@ -83,3 +83,33 @@ def test_invalid_spec_is_rejected_before_any_run(monkeypatch):
     res = client.post("/api/run", json={"source": "x", "name": "bad-spec-agent", "spec": {}})
     assert res.status_code == 422
     assert not started
+
+
+def test_get_traces_returns_fixture_fallbacks_when_no_traces():
+    res = client.get("/api/traces/trip-planner-agent")
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    assert any("trace_id" in item for item in data)
+
+
+def test_get_trace_content():
+    res = client.get("/api/trace/trip-planner-agent/trace_good.json")
+    assert res.status_code == 200
+    trace = res.json()
+    assert trace.get("trace_id") == "TR-38c71b4a"
+    assert "turns" in trace
+
+
+def test_judge_endpoint_no_llm():
+    res = client.post(
+        "/api/judge/trip-planner-agent",
+        json={"trace_file": "trace_good.json", "use_llm": False},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert "judge" in data
+    assert "checks" in data
+    assert data["judge"]["overall_quality"]["score"] == 3

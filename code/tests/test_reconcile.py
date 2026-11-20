@@ -109,3 +109,32 @@ def test_every_finding_validates_and_bad_input_is_rejected():
         reconcile(store, SPEC, [])
     with pytest.raises(ModelError, match="without 'passed'"):
         reconcile(store, SPEC, [run([{"rule_id": "R1"}])])
+def test_passing_runs_cannot_offset_a_failure():
+    store = make_store()  # starts at 0.87
+    runs = [run([PASS], trace_id=f"TR-{i}") for i in range(1, 5)] + [run([FAIL], trace_id="TR-9")]
+    reconcile(store, SPEC, runs)
+    entry = store.get("cap_004")
+    assert entry["confidence"] == 0.435
+    assert entry["evidence"][-1]["trace_id"] == "TR-9"
+    assert len(entry["evidence"]) == 6  # static + 4 passing + 1 failing
+
+
+def test_two_failures_drop_confidence_twice():
+    store = make_store()
+    reconcile(store, SPEC, [run([FAIL], trace_id="TR-1"), run([FAIL], trace_id="TR-2")])
+    assert store.get("cap_004")["confidence"] == 0.2175
+
+
+def test_description_states_the_failure_rate():
+    store = make_store()
+    runs = [run([PASS], trace_id="TR-1"), run([FAIL], trace_id="TR-2"), run([PASS], trace_id="TR-3")]
+    finding = reconcile(store, SPEC, runs)["finding"]
+    assert "Failed 1 of 3 runs." in finding["description"]
+
+
+def test_add_evidence_changes_neither_status_nor_confidence():
+    store = make_store()
+    store.add_evidence("cap_004", "RT-020", "TR-5")
+    entry = store.get("cap_004")
+    assert (entry["status"], entry["confidence"]) == ("unverified", 0.87)
+    assert entry["evidence"][-1] == {"source": "runtime", "test_id": "RT-020", "trace_id": "TR-5"}

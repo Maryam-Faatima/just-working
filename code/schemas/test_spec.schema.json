@@ -24,7 +24,13 @@
     "difficulty": { "type": "integer", "minimum": 1, "maximum": 10 },
     "turn_budget": { "type": "integer", "minimum": 1 },
     "modality": { "enum": ["text", "voice"] },
-    "generated_by": { "enum": ["seed", "adaptive"] }
+    "generated_by": { "enum": ["seed", "adaptive"] },
+    "script": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Optional scripted user messages, sent in order before any simulated turns (decision 54)"
+    }
   },
   "additionalProperties": false
 }

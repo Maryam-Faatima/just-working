@@ -5,7 +5,9 @@ import { Phase0RubricView } from './components/Phase0RubricView';
 import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
+import { TestRunsJudgeView } from './components/TestRunsJudgeView';
 import { EvidenceGraphView } from './components/EvidenceGraphView';
+import { TestRunsView } from './components/TestRunsView';
 import { RequirementsQuestionnaireView } from './components/RequirementsQuestionnaireView';
 import {
   checkBackendHealth,
@@ -17,6 +19,8 @@ import {
   fetchAgentModel,
   fetchAgentEvidence,
   fetchAgentReport,
+  fetchAgentTests,
+  fetchAgentTestRun,
   triggerPipelineRun,
   fetchAgentStatus
 } from './services/api';
@@ -28,6 +32,7 @@ const SCREENS = [
   { id: 'scan', label: 'AST Scan & Tools' },
   { id: 'callgraph', label: 'Call Graph' },
   { id: 'model', label: 'Behavioral Model V0' },
+  { id: 'test', label: 'Test Runs & LLM Judge' },
   { id: 'evidence', label: 'Evidence Graph' }
 ];
 
@@ -47,6 +52,8 @@ function App() {
   const [modelData, setModelData] = useState(null);
   const [evidenceData, setEvidenceData] = useState(null);
   const [reportData, setReportData] = useState(null);
+  const [testsData, setTestsData] = useState(null);
+  const [testRunData, setTestRunData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [runStatusMessage, setRunStatusMessage] = useState(null);
 
@@ -72,7 +79,7 @@ function App() {
     if (!agentName) return;
     setIsLoading(true);
     try {
-      const [sum, sp, rub, scn, cg, mdl, evd, rpt] = await Promise.all([
+      const [sum, sp, rub, scn, cg, mdl, evd, rpt, tst, trun] = await Promise.all([
         fetchAgentSummary(agentName),
         fetchAgentSpec(agentName),
         fetchAgentRubric(agentName),
@@ -80,7 +87,9 @@ function App() {
         fetchAgentCallgraph(agentName),
         fetchAgentModel(agentName),
         fetchAgentEvidence(agentName),
-        fetchAgentReport(agentName)
+        fetchAgentReport(agentName),
+        fetchAgentTests(agentName),
+        fetchAgentTestRun(agentName)
       ]);
 
       setSummaryData(sum);
@@ -91,6 +100,8 @@ function App() {
       setModelData(mdl);
       setEvidenceData(evd);
       setReportData(rpt);
+      setTestsData(tst);
+      setTestRunData(trun);
       setCurrentAgent(agentName);
       setHasLoadedAgent(true);
     } catch (err) {
@@ -137,11 +148,15 @@ function App() {
   };
 
   const handlePrev = () => {
-    setActiveScreenIndex(prev => Math.max(0, prev - 1));
+    React.startTransition(() => {
+      setActiveScreenIndex(prev => Math.max(0, prev - 1));
+    });
   };
 
   const handleNext = () => {
-    setActiveScreenIndex(prev => Math.min(SCREENS.length - 1, prev + 1));
+    React.startTransition(() => {
+      setActiveScreenIndex(prev => Math.min(SCREENS.length - 1, prev + 1));
+    });
   };
 
   const currentScreenId = SCREENS[activeScreenIndex]?.id;
@@ -463,9 +478,13 @@ function App() {
                   <PipelineSummaryView
                     summaryData={summaryData}
                     onNavigateStage={(stage) => {
-                      const target = stage === 'report' ? 'evidence' : stage;
+                      const target = stage === 'report' ? 'evidence' : stage === 'test' ? 'tests' : stage;
                       const idx = SCREENS.findIndex(s => s.id === target);
-                      if (idx !== -1) setActiveScreenIndex(idx);
+                      if (idx !== -1) {
+                        React.startTransition(() => {
+                          setActiveScreenIndex(idx);
+                        });
+                      }
                     }}
                   />
                 )}
@@ -494,6 +513,13 @@ function App() {
                 {currentScreenId === 'model' && (
                   <BehavioralModelView
                     modelData={modelData}
+                  />
+                )}
+
+                {currentScreenId === 'test' && (
+                  <TestRunsJudgeView
+                    currentAgent={currentAgent}
+                    rubricData={rubricData}
                   />
                 )}
 

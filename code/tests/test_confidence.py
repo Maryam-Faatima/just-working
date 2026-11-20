@@ -49,3 +49,6 @@ def test_scanned_tool_becomes_valid_model_entry(tmp_path):
     Draft202012Validator(load("schemas/model_entry.schema.json")).validate(entry)
     assert entry["id"] == "cap_001"
     assert entry["detected_by"] == "rule"
+
+def test_baseline_never_exceeds_the_cap():
+    assert baseline_confidence("rule+llm", "decorator:tool") == 0.95

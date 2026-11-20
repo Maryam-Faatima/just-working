@@ -26,7 +26,6 @@ _FINDING_VALIDATOR = Draft202012Validator(json.loads(FINDING_SCHEMA_PATH.read_te
 
 SEVERITIES = ["info", "minor", "major", "critical"]
 DEFAULT_FAIL_SEVERITY = "major"  # used when a failed check carries no severity
-CRASH_SEVERITY = "critical"      # rubric R12: no crash or empty reply
 UNREACHABLE_MIN_RUNS = 3         # "never triggered after repeated attempts"
 CRASH_SEVERITY = "critical"      # rubric U1: no crash or empty reply
 
@@ -90,21 +89,23 @@ def decide_outcome(infos):
 
 
 def _apply(store, entry_id, outcome, infos, test_id):
-    """One bounded confidence step per run. Passing runs first, failing runs last,
-    so a single failure always leaves the entry contradicted."""
+    """One bounded confidence step per run.
+
+    If any run failed, only the failing runs move confidence, starting from the original
+    value. Passing runs are kept as evidence but cannot offset a failure, so a contradicted
+    entry never ends up more trusted than it started."""
     done = [r for r in infos if r["status"] == "completed"]
     if outcome == "contradicted":
-        passing = [r for r in done if not r["failed"] and r["exercised"]]
-        failing = [r for r in done if r["failed"]]
-        steps = [("confirmed", r) for r in passing] + [("contradicted", r) for r in failing]
+        for r in done:
+            if not r["failed"] and r["exercised"]:
+                store.add_evidence(entry_id, test_id, r["trace_id"])
+        steps = [("contradicted", r) for r in done if r["failed"]]
     elif outcome == "confirmed":
         steps = [("confirmed", r) for r in done if r["exercised"]]
     else:
         steps = [("unreachable", r) for r in done]
     for step_outcome, run in steps:
         store.apply_outcome(entry_id, step_outcome, test_id=test_id, trace_id=run["trace_id"])
-
-
 def discover_new(store, spec, runs):
     """Add a `discovered` capability for every tool the agent called that the model lacks."""
     known = set()
@@ -146,11 +147,13 @@ def _description(entry, infos, outcome):
         for c in r["failed"]:
             parts.append(c.get("description") or f"Check {c.get('rule_id', '?')} failed.")
     if parts:
+        bad = sum(1 for r in infos if r["failed"] or r["status"] != "completed")
+        if len(infos) > 1:
+            parts.append(f"Failed {bad} of {len(infos)} runs.")
         return " ".join(dict.fromkeys(parts))
     if outcome == "confirmed":
         return f"All checks passed. {entry['name']} behaved as claimed."
     return f"{entry['name']} was not exercised in these runs. No status change."
-
 
 def reconcile(store, spec, runs, finding_id=None):
     """Reconcile the runs of one test against the entry it targeted.

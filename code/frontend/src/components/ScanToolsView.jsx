@@ -4,6 +4,7 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
   const [activeTab, setActiveTab] = useState('tools'); // 'tools' | 'flow' | 'nodes' | 'edges' | 'registrations'
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNodeName, setSelectedNodeName] = useState(null);
+  const [toolsLimit, setToolsLimit] = useState(24);
 
   if (!scanData) {
     return (
@@ -134,7 +135,10 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
             type="text"
             placeholder="Search tools or docstrings..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setToolsLimit(24);
+            }}
             style={{
               padding: '8px 14px',
               borderRadius: 'var(--radius-full)',
@@ -615,107 +619,184 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
       )}
 
       {/* Main Tab Content */}
-      {activeTab === 'tools' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
-          {filteredTools.map((tool, idx) => (
-            <div
-              key={idx}
-              onClick={() => onSelectTool && onSelectTool(tool)}
-              style={{
-                background: '#fff',
-                borderRadius: 'var(--radius-md)',
-                border: '1.5px solid var(--border-default)',
-                padding: '20px',
-                boxShadow: 'var(--shadow-card)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                transition: 'transform 0.15s ease, border-color 0.15s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.borderColor = 'var(--accent)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.borderColor = 'var(--border-default)';
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <code style={{ fontSize: '14px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                    {tool.name}()
-                  </code>
-                  <span style={{
-                    fontSize: '10px',
-                    fontFamily: 'var(--font-mono)',
-                    background: 'var(--bg-inset)',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    color: 'var(--ink-secondary)'
-                  }}>
-                    {tool.detected_by || 'decorator:tool'}
-                  </span>
-                </div>
+      {activeTab === 'tools' && (() => {
+        const visibleTools = filteredTools.slice(0, toolsLimit);
+        const isTruncated = filteredTools.length > toolsLimit;
 
-                <p style={{
-                  fontSize: '12.5px',
-                  color: 'var(--ink-secondary)',
-                  lineHeight: 1.5,
-                  marginBottom: '14px',
-                  minHeight: '38px'
-                }}>
-                  {tool.docstring || 'No docstring provided in code.'}
-                </p>
-              </div>
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
+              {visibleTools.map((tool, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => onSelectTool && onSelectTool(tool)}
+                  style={{
+                    background: '#fff',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1.5px solid var(--border-default)',
+                    padding: '20px',
+                    boxShadow: 'var(--shadow-card)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    transition: 'transform 0.15s ease, border-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.borderColor = 'var(--accent)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = 'var(--border-default)';
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <code style={{ fontSize: '14px', fontWeight: 800, color: 'var(--ink-primary)' }}>
+                        {tool.name}()
+                      </code>
+                      <span style={{
+                        fontSize: '10px',
+                        fontFamily: 'var(--font-mono)',
+                        background: 'var(--bg-inset)',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        color: 'var(--ink-secondary)'
+                      }}>
+                        {tool.detected_by || 'decorator:tool'}
+                      </span>
+                    </div>
 
-              <div>
-                {/* Arguments */}
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Parameters ({tool.args ? tool.args.length : 0})
+                    <p style={{
+                      fontSize: '12.5px',
+                      color: 'var(--ink-secondary)',
+                      lineHeight: 1.5,
+                      marginBottom: '14px',
+                      minHeight: '38px'
+                    }}>
+                      {tool.docstring || 'No docstring provided in code.'}
+                    </p>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                    {tool.args && tool.args.length > 0 ? (
-                      tool.args.map((arg, aidx) => (
-                        <span key={aidx} style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          background: 'var(--bg-surface-soft)',
-                          border: '1px solid var(--border-subtle)',
-                          padding: '2px 7px',
-                          borderRadius: '4px',
-                          color: 'var(--ink-primary)'
-                        }}>
-                          {arg}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: '11px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>None</span>
-                    )}
+
+                  <div>
+                    {/* Arguments */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Parameters ({tool.args ? tool.args.length : 0})
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                        {tool.args && tool.args.length > 0 ? (
+                          tool.args.map((arg, aidx) => (
+                            <span key={aidx} style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '11px',
+                              background: 'var(--bg-surface-soft)',
+                              border: '1px solid var(--border-subtle)',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              color: 'var(--ink-primary)'
+                            }}>
+                              {arg}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>None</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* File Reference */}
+                    <div style={{
+                      borderTop: '1px dashed var(--border-subtle)',
+                      paddingTop: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--ink-muted)',
+                      fontFamily: 'var(--font-mono)'
+                    }}>
+                      <span>{tool.file}</span>
+                      <span>Lines {tool.start_line}–{tool.end_line}</span>
+                    </div>
                   </div>
                 </div>
-
-                {/* File Reference */}
-                <div style={{
-                  borderTop: '1px dashed var(--border-subtle)',
-                  paddingTop: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '11px',
-                  color: 'var(--ink-muted)',
-                  fontFamily: 'var(--font-mono)'
-                }}>
-                  <span>{tool.file}</span>
-                  <span>Lines {tool.start_line}–{tool.end_line}</span>
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+
+            {filteredTools.length > 24 && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '14px 20px',
+                background: '#fff',
+                border: '1.5px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: 'var(--shadow-sm)'
+              }}>
+                <span style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', fontWeight: 600 }}>
+                  Showing {visibleTools.length} of {filteredTools.length} tools
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {isTruncated && (
+                    <button
+                      onClick={() => setToolsLimit(prev => Math.min(prev + 24, filteredTools.length))}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        background: '#fff',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        color: 'var(--ink-primary)'
+                      }}
+                    >
+                      Show More (+24)
+                    </button>
+                  )}
+                  {isTruncated && (
+                    <button
+                      onClick={() => setToolsLimit(filteredTools.length)}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        background: 'var(--accent)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        color: '#fff'
+                      }}
+                    >
+                      Show All ({filteredTools.length})
+                    </button>
+                  )}
+                  {toolsLimit > 24 && (
+                    <button
+                      onClick={() => setToolsLimit(24)}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        background: 'transparent',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        color: 'var(--ink-muted)'
+                      }}
+                    >
+                      Reset to 24
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {activeTab === 'nodes' && (
         <div style={{ background: '#fff', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', overflow: 'hidden' }}>

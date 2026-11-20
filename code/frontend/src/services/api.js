@@ -4,7 +4,7 @@
  * and the GreatTest FastAPI backend service.
  */
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
 export async function checkBackendHealth() {
   try {
@@ -146,4 +146,65 @@ export async function fetchAgentReport(agentName) {
   return await res.json();
 }
 
+export async function fetchAgentTestSpecs(agentName) {
+  const res = await fetch(`${API_BASE}/test-specs/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return [];
+  return await res.json();
+}
+
+export async function fetchAgentTestRun(agentName) {
+  const res = await fetch(`${API_BASE}/test-run/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentTraces(agentName) {
+  const res = await fetch(`${API_BASE}/traces/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return [];
+  return await res.json();
+}
+
+export async function fetchAgentTrace(agentName, filename) {
+  let res = await fetch(`${API_BASE}/traces/${encodeURIComponent(agentName)}/${encodeURIComponent(filename)}`);
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/trace/${encodeURIComponent(agentName)}/${encodeURIComponent(filename)}`);
+  }
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentJudgeResults(agentName) {
+  const res = await fetch(`${API_BASE}/judge/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function runJudgeEvaluation(agentName, { trace = null, traceFile = null, useLlm = true } = {}) {
+  const res = await fetch(`${API_BASE}/judge/${encodeURIComponent(agentName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      trace,
+      trace_file: traceFile,
+      use_llm: useLlm
+    })
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const errJson = await res.json();
+      if (errJson.detail) detail = errJson.detail;
+    } catch {}
+    throw new Error(`Evaluation failed: ${detail}`);
+  }
+  return await res.json();
+}
+
+// ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
+
+export async function fetchAgentTests(agentName) {
+  const res = await fetch(`${API_BASE}/tests/${agentName}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
 
