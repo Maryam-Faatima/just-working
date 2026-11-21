@@ -21,6 +21,7 @@ reconcile(store, spec, runs, finding_id=None)
 | No failures, tool never called, 3 or more completed runs | unreachable | Confidence moves down |
 | No failures, tool never called, fewer than 3 runs | none (inconclusive) | None |
 | Run crashed or timed out | none | None. A critical finding is still written |
+| Entry already contradicted, a later test passes or finds the tool unreachable | none (status kept) | Passing runs added as evidence, confidence unchanged, the finding says the entry stays contradicted (decision 64) |
 | Agent called a tool the model lacks | discovered entry added | New entry, status discovered, runtime evidence |
 
 With several runs, a failure always wins. If any run failed, only the failing runs move

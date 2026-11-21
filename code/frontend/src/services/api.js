@@ -208,3 +208,8 @@ export async function fetchAgentTests(agentName) {
   return await res.json();
 }
 
+export async function fetchModelChanges(agentName) {
+  const res = await fetch(`${API_BASE}/model-changes/${encodeURIComponent(agentName)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}

@@ -106,6 +106,15 @@ def _apply(store, entry_id, outcome, infos, test_id):
         steps = [("unreachable", r) for r in done]
     for step_outcome, run in steps:
         store.apply_outcome(entry_id, step_outcome, test_id=test_id, trace_id=run["trace_id"])
+
+
+def _keep_evidence(store, entry_id, infos, test_id):
+    """A contradicted entry stays contradicted. Passing runs are kept as evidence only."""
+    for r in infos:
+        if r["status"] == "completed" and r["exercised"]:
+            store.add_evidence(entry_id, test_id, r["trace_id"])
+
+
 def discover_new(store, spec, runs):
     """Add a `discovered` capability for every tool the agent called that the model lacks."""
     known = set()
@@ -167,11 +176,17 @@ def reconcile(store, spec, runs, finding_id=None):
     before = copy.deepcopy(store.get(entry_id))
     infos = [classify_run(before, run) for run in runs]
     outcome = decide_outcome(infos)
-    if outcome:
+    sticky = before["status"] == "contradicted" and outcome in ("confirmed", "unreachable")
+    if sticky:
+        _keep_evidence(store, entry_id, infos, spec["test_id"])
+    elif outcome:
         _apply(store, entry_id, outcome, infos, spec["test_id"])
     discovered = discover_new(store, spec, runs)
     after = store.get(entry_id)
 
+    description = _description(before, infos, outcome)
+    if sticky:
+        description += " The entry stays contradicted because an earlier test failed."
     bad = [r for r in infos if r["failed"] or r["status"] != "completed"]
     finding = {
         "finding_id": finding_id or f"F-{spec['test_id']}",
@@ -180,10 +195,10 @@ def reconcile(store, spec, runs, finding_id=None):
         "trace_id": (bad or infos)[0]["trace_id"],
         "result": "fail" if bad else "pass",
         "severity": _severity(infos),
-        "description": _description(before, infos, outcome),
+        "description": description,
         "reproducibility": {"runs": len(infos), "failures": len(bad)},
     }
-    if outcome:
+    if outcome and not sticky:
         finding["status_change"] = {"from": before["status"], "to": after["status"]}
         finding["confidence_change"] = {"from": before["confidence"], "to": after["confidence"]}
     validate_finding(finding)

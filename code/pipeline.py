@@ -82,6 +82,8 @@ def stage_scan(ctx):
     scan["scanned_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     ctx["scan"] = scan
     ctx["folder"] = write_scan_outputs(scan, ctx["name"], ctx["out"])
+    for stale in ("model_changes.json", "model_v1.json"):  # a new run starts with no flips
+        Path(ctx["folder"], stale).unlink(missing_ok=True)
     detail = (f"{scan['files_scanned']} files, {len(scan['tools'])} tools, "
               f"{len(scan['nodes'])} nodes, {len(scan['edges'])} edges, "
               f"{len(scan['context_files'])} doc/config files")

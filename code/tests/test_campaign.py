@@ -74,3 +74,101 @@ def test_run_sets_ctx_and_writes_findings(monkeypatch, tmp_path):
 
 def test_run_skips_cleanly_without_traces():
     assert campaign.run({"store": make_store(), "rubric": {}}) == "skipped: no traces yet"
+
+
+RUBRIC = {"items": [
+    {"rule_id": "R1", "target_id": "con_001", "source": "developer"},
+    {"rule_id": "R2", "target_id": "con_002", "source": "developer"},
+    {"rule_id": "U1", "source": "default"},
+]}
+
+
+def make_constraint(entry_id, rule_id):
+    return {"id": entry_id, "type": "constraint", "name": f"rule {rule_id}",
+            "description": "Developer rule.",
+            "evidence": [{"source": "developer", "pattern": f"phase0:rule:{rule_id}"}],
+            "confidence": 0.60, "status": "unverified", "detected_by": "developer"}
+
+
+def test_scope_checks_drops_other_rules_keeps_own_and_universal():
+    checks = [{"rule_id": "R1", "passed": True}, {"rule_id": "R2", "passed": False},
+              {"rule_id": "U1", "passed": True}, {"rule_id": "X9", "passed": True}]
+    kept = campaign.scope_checks(checks, RUBRIC, "con_001")
+    assert [c["rule_id"] for c in kept] == ["R1", "U1", "X9"]
+
+
+def test_another_rules_failure_does_not_contradict_this_entry(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [{"rule_id": "R1", "passed": True},
+                                     {"rule_id": "R2", "passed": False, "severity": "critical"},
+                                     {"rule_id": "U1", "passed": True}]})
+    store = make_store()
+    store.add(make_constraint("con_001", "R1"))
+    findings, _, _ = campaign.run_campaign(store, RUBRIC, [spec("RT-1", "con_001")], [make_trace("T1")])
+    assert findings[0]["result"] == "pass"
+    assert store.get("con_001")["status"] == "confirmed"
+
+
+def test_universal_failure_still_contradicts(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [{"rule_id": "R1", "passed": True},
+                                     {"rule_id": "U1", "passed": False, "severity": "critical"}]})
+    store = make_store()
+    store.add(make_constraint("con_001", "R1"))
+    campaign.run_campaign(store, RUBRIC, [spec("RT-1", "con_001")], [make_trace("T1")])
+    assert store.get("con_001")["status"] == "contradicted"
+
+
+def test_contradicted_stays_contradicted_after_a_later_passing_test(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [FAIL], "T2": [PASS]})
+    store = make_store()
+    specs = [spec("RT-1"), spec("RT-2")]
+    traces = [make_trace("T1", "RT-1"), make_trace("T2", "RT-2")]
+    findings, _, _ = campaign.run_campaign(store, {}, specs, traces)
+    entry = store.get("cap_004")
+    assert entry["status"] == "contradicted" and entry["confidence"] == 0.435
+    assert {"source": "runtime", "test_id": "RT-2", "trace_id": "T2"} in entry["evidence"]
+    assert findings[1]["result"] == "pass" and "status_change" not in findings[1]
+    assert "stays contradicted" in findings[1]["description"]
+
+
+def test_run_writes_live_model_changes(monkeypatch, tmp_path):
+    stub_checks(monkeypatch, {"T1": [FAIL]})
+    ctx = {"store": make_store(), "rubric": {}, "test_specs": [spec()],
+           "traces": [make_trace("T1")], "folder": tmp_path}
+    campaign.run(ctx)
+    data = json.loads((tmp_path / "model_changes.json").read_text(encoding="utf-8"))
+    assert data["state"] == "done" and data["done_specs"] == data["total_specs"] == 1
+    change = data["changes"][0]
+    assert (change["entry_id"], change["status_from"], change["status_to"]) == ("cap_004", "unverified", "contradicted")
+    assert (change["confidence_from"], change["confidence_to"]) == (0.87, 0.435)
+    assert change["runs"] == 1 and change["failures"] == 1
+
+
+def test_progress_is_reported_after_each_spec(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [PASS], "T2": [PASS]})
+    calls, changes = [], []
+    traces = [make_trace("T1", "RT-1"), make_trace("T2", "RT-2")]
+    campaign.run_campaign(make_store(), {}, [spec("RT-1"), spec("RT-2")], traces,
+                          changes=changes, on_progress=lambda: calls.append(len(changes)))
+    assert calls == [1, 2]
+
+
+def test_discovered_tool_appears_as_a_change_from_nothing(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [PASS]})
+    trace = make_trace("T1")
+    trace["turns"][1]["tool_calls"].append({"name": "refund_payment"})
+    changes = []
+    campaign.run_campaign(make_store(), {}, [spec()], [trace], changes=changes)
+    found = next(c for c in changes if c["result"] == "discovered")
+    assert found["entry_name"] == "refund_payment" and found["status_from"] is None
+
+
+def test_run_saves_the_updated_model_as_v1(monkeypatch, tmp_path):
+    stub_checks(monkeypatch, {"T1": [FAIL]})
+    store = make_store()
+    ctx = {"store": store, "rubric": {}, "test_specs": [spec()],
+           "traces": [make_trace("T1")], "folder": tmp_path}
+    campaign.run(ctx)
+    saved = json.loads((tmp_path / "model_v1.json").read_text(encoding="utf-8"))
+    assert saved["version"] == "v1"
+    assert saved["entries"][0]["status"] == "contradicted"
+    assert store.version == "v0"

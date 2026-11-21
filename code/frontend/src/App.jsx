@@ -5,6 +5,7 @@ import { Phase0RubricView } from './components/Phase0RubricView';
 import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
+import { LiveModelChanges } from './components/LiveModelChanges';
 import { TestRunsJudgeView } from './components/TestRunsJudgeView';
 import { EvidenceGraphView } from './components/EvidenceGraphView';
 import { TestRunsView } from './components/TestRunsView';
@@ -513,6 +514,7 @@ function App() {
                 {currentScreenId === 'model' && (
                   <BehavioralModelView
                     modelData={modelData}
+                    currentAgent={currentAgent}
                   />
                 )}
 
@@ -535,6 +537,11 @@ function App() {
           </>
         )}
       </main>
+
+      {/* Live model flips while a run is in progress (polls /api/model-changes) */}
+      {runStatusMessage && currentAgent && (
+        <LiveModelChanges agentName={currentAgent} active floating />
+      )}
 
       {/* Real-Time Run Progress Popup / Toast at Bottom */}
       {runStatusMessage && (

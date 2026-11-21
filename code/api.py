@@ -8,6 +8,7 @@ and inspect all generated outputs (spec, rubric, scan, callgraph, model).
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,17 @@ from understand.phase0 import SpecError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("greattest-api")
 
+LOCAL_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+
+def allowed_origins(extra=None):
+    """Local dev origins plus the comma separated CORS_ORIGINS setting (the hosted frontend)."""
+    if extra is None:
+        extra = os.environ.get("CORS_ORIGINS", "")
+    hosted = [o.strip().rstrip("/") for o in extra.split(",") if o.strip()]
+    return LOCAL_ORIGINS + [o for o in hosted if o not in LOCAL_ORIGINS]
+
+
 app = FastAPI(
     title="GreatTest API",
     description="Evidence-based Testing Framework Bridge",
@@ -35,7 +47,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins(),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
@@ -365,7 +377,7 @@ def get_callgraph(name: str):
 @app.get("/api/model/{name}")
 def get_model(name: str):
     agent_dir = _agent_dir(name)
-    for candidate in ["model_v0.json", "model_v0_rule.json"]:
+    for candidate in ["model_v1.json", "model_v0.json", "model_v0_rule.json"]:
         file_path = agent_dir / candidate
         if file_path.exists():
             try:
@@ -510,6 +522,22 @@ def get_test_run(name: str):
     return _read_json(file_path, "test_run.json")
 
 
+@app.get("/api/model-changes/{name}")
+def get_model_changes(name: str):
+    """Live view of the check stage: the model entries that moved, written as tests are reconciled.
+
+    Read-only and always 200, so the frontend can poll it during a run. state is none (no check
+    stage has run), running, or done."""
+    file_path = _agent_dir(name) / "model_changes.json"
+    if not file_path.exists():
+        return {"state": "none", "done_specs": 0, "total_specs": 0, "changes": []}
+    try:
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # The file is replaced atomically, so this is rare. The next poll gets the new one.
+        return {"state": "running", "done_specs": 0, "total_specs": 0, "changes": []}
+
+
 @app.get("/api/traces/{name}")
 def get_traces(name: str):
     """List all available traces for an agent, with fallbacks to committed recorded traces."""
@@ -594,16 +622,6 @@ def get_trace_content(name: str, filename: str):
 @app.post("/api/judge/{name}")
 def run_judge_endpoint(name: str, payload: JudgeRequest):
     """Run the LLM judge and deterministic checks on a trace for this agent."""
-    agent_dir = _agent_dir(name)
-    rubric_file = agent_dir / "rubric.json"
-    if not rubric_file.exists():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Rubric for agent '{name}' not found. Run analysis first.",
-        )
-
-    rubric = _read_json(rubric_file, "rubric.json")
-
     trace_data = payload.trace
     if not trace_data and payload.trace_file:
         target = _trace_path(name, payload.trace_file)
@@ -615,11 +633,21 @@ def run_judge_endpoint(name: str, payload: JudgeRequest):
         raise HTTPException(status_code=400, detail="No trace data provided to evaluate.")
     _check_trace(trace_data)
 
+    agent_dir = _agent_dir(name)
+    rubric_file = agent_dir / "rubric.json"
+    if rubric_file.exists():
+        rubric = _read_json(rubric_file, "rubric.json")
+    else:
+        spec_file = agent_dir / "spec.json"
+        spec = _read_json(spec_file, "spec.json") if spec_file.exists() else None
+        rubric = phase0.build_rubric(spec=spec, agent=name)
+
     # 1. Rule checks first (testing/checks.py), 2. then the judge's quality scores (Decision 62)
     checks_res = checks.run_checks(trace_data, rubric, use_llm=payload.use_llm)
     judge_res = judge.run_judge(trace_data, rubric, use_llm=payload.use_llm)
 
     # Persist results in agent output directory
+    agent_dir.mkdir(parents=True, exist_ok=True)
     (agent_dir / "judge_results.json").write_text(
         json.dumps(judge_res, indent=2), encoding="utf-8"
     )
@@ -662,12 +690,18 @@ def get_judge_results(name: str):
 
     rubric_file = agent_dir / "rubric.json"
     rec_good = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
-    if rubric_file.exists() and rec_good.exists():
+    if rec_good.exists():
         try:
-            rubric = json.loads(rubric_file.read_text(encoding="utf-8"))
+            if rubric_file.exists():
+                rubric = json.loads(rubric_file.read_text(encoding="utf-8"))
+            else:
+                spec_file = agent_dir / "spec.json"
+                spec = json.loads(spec_file.read_text(encoding="utf-8")) if spec_file.exists() else None
+                rubric = phase0.build_rubric(spec=spec, agent=name)
             trace = json.loads(rec_good.read_text(encoding="utf-8"))
             checks_res = checks.run_checks(trace, rubric, use_llm=True)
             judge_res = judge.run_judge(trace, rubric, use_llm=True)
+            agent_dir.mkdir(parents=True, exist_ok=True)
             judge_file.write_text(json.dumps(judge_res, indent=2), encoding="utf-8")
             checks_file.write_text(json.dumps(checks_res, indent=2), encoding="utf-8")
             return {

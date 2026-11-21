@@ -335,3 +335,16 @@ def test_user_supplied_name_is_made_safe_as_a_folder_name(repo, tmp_path):
     assert summary["agent"] == "evil-name"
     assert (tmp_path / "out" / "evil-name" / "run_summary.json").exists()
     assert not (tmp_path.parent / "evil name").exists()
+
+
+def test_stage_scan_clears_the_last_runs_model_changes(monkeypatch, tmp_path):
+    (tmp_path / "model_changes.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "model_v1.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(pipeline, "scan_repo", lambda root: {
+        "files_scanned": 0, "tools": [], "nodes": [], "edges": [], "errors": []})
+    monkeypatch.setattr(pipeline.context_files, "list_context_files", lambda root: [])
+    monkeypatch.setattr(pipeline, "head_commit", lambda root: "abc")
+    monkeypatch.setattr(pipeline, "write_scan_outputs", lambda scan, name, out: tmp_path)
+    pipeline.stage_scan({"repo_root": tmp_path, "source": "x", "name": "demo", "out": None})
+    assert not (tmp_path / "model_changes.json").exists()
+    assert not (tmp_path / "model_v1.json").exists()
