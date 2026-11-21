@@ -146,7 +146,17 @@ def build_graph(
             description=f.get("description"),
             status_change=f.get("status_change"),
             confidence_change=f.get("confidence_change"),
+            reproducibility=f.get("reproducibility"),
+            target_id=f.get("target_id"),
+            test_id=f.get("test_id"),
+            trace_id=f.get("trace_id"),
         )
+        # A finding always names its test and trace. When the run data was not passed in,
+        # keep the chain unbroken with minimal nodes (richer nodes created earlier win).
+        if f.get("trace_id"):
+            add_node(f"trace:{f['trace_id']}", "trace", trace_id=f["trace_id"], test_id=f.get("test_id"))
+        if f.get("test_id"):
+            add_node(f"test:{f['test_id']}", "test_spec", test_id=f["test_id"], target_id=f.get("target_id"))
 
     # Model-entry nodes + their upstream evidence nodes
     for entry in entries:
@@ -251,10 +261,18 @@ def build_graph(
         f_node_id = f"finding:{f_id}"
         trace_id = f.get("trace_id", "")
         target_id = f.get("target_id", "")
+        test_id = f.get("test_id", "")
         if trace_id:
             add_edge(f"trace:{trace_id}", f_node_id, "triggers")
+        if test_id and trace_id:
+            add_edge(f"test:{test_id}", f"trace:{trace_id}", "produces")
         if target_id and target_id in nodes:
             add_edge(target_id, f_node_id, "has_finding")
+            if test_id:
+                add_edge(target_id, f"test:{test_id}", "targeted_by")
+
+    # An edge must never point at a node that does not exist.
+    edges = [e for e in edges if e["from"] in nodes and e["to"] in nodes]
 
     # ── Stats ─────────────────────────────────────────────────────────────────
     kind_counts: dict[str, int] = {}
