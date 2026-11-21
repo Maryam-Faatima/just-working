@@ -54,6 +54,7 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] AY-8 FYP-2 Evaluation Plan: baselines, metrics, benchmarks (26 Nov)
 - [ ] AY-9 Requirements and Scope Chapters (27 Nov)
 - [ ] Unit tests with fake LLM for every AY module
+- hello
 
 ## F. Poster contents (AY with all)
 - [X] Title, members, supervisors top-left; goals top-right; plan and deliverables bottom
