@@ -183,3 +183,9 @@ def test_allowed_origins_adds_the_hosted_frontend_from_the_setting():
     origins = api.allowed_origins("https://great.vercel.app/, https://other.example.com")
     assert origins[-2:] == ["https://great.vercel.app", "https://other.example.com"]
     assert api.allowed_origins("http://localhost:5173") == api.LOCAL_ORIGINS
+
+
+def test_non_travel_agent_gets_no_fixture_fallbacks():
+    name = "open_deep_research"
+    assert client.get(f"/api/judge/{name}").status_code == 404
+    assert client.get(f"/api/traces/{name}").json() == []

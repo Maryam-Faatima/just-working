@@ -58,6 +58,19 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# The committed fixtures are travel-agent data. Only these agents may fall back to them.
+TRAVEL_DEMO_AGENTS = {
+    "trip-planner-agent",
+    "trip-planner-agent-main",
+    "travel-agent",
+    "target_agent",
+    "target-agent",
+}
+
+
+def _uses_travel_fixtures(name: str) -> bool:
+    return name in TRAVEL_DEMO_AGENTS
 ACTIVE_RUNS: dict[str, dict[str, Any]] = {}
 
 
@@ -498,7 +511,7 @@ def get_tests(name: str):
 
     # Fallback to travel seed specs fixture if available
     fixture_specs = BASE_DIR / "fixtures" / "travel_seed_specs.json"
-    if fixture_specs.exists():
+    if _uses_travel_fixtures(name) and fixture_specs.exists():
         return json.loads(fixture_specs.read_text(encoding="utf-8"))
 
     raise HTTPException(
@@ -564,7 +577,7 @@ def get_traces(name: str):
                 continue
 
     # Fallback to committed recorded good trace and sample trace if no output traces exist yet
-    if not traces_list:
+    if not traces_list and _uses_travel_fixtures(name):
         rec_good = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
         if rec_good.exists():
             try:
@@ -690,7 +703,7 @@ def get_judge_results(name: str):
 
     rubric_file = agent_dir / "rubric.json"
     rec_good = BASE_DIR / "fixtures" / "recorded" / "trace_good.json"
-    if rec_good.exists():
+    if _uses_travel_fixtures(name) and rec_good.exists():
         try:
             if rubric_file.exists():
                 rubric = json.loads(rubric_file.read_text(encoding="utf-8"))
