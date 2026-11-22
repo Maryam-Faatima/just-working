@@ -783,3 +783,16 @@ def test_report_ignores_missing_or_corrupt_judge_files(tmp_path):
     (tmp_path / "judge_results.json").write_text("{bad", encoding="utf-8")
     (tmp_path / "check_results.json").write_text("[1, 2", encoding="utf-8")
     assert "## LLM Judge" not in _report(tmp_path)
+
+
+def test_report_keeps_full_descriptions_and_has_evidence_chains(tmp_path):
+    long = "The agent crashed: " + "x" * 250
+    text = _report(tmp_path, findings=[{**_finding(), "description": long}],
+                   test_specs=[_test_spec()], traces=[_trace()])
+    assert long in text
+    assert "## Evidence Chains" in text
+    assert "| F-001 | fail | TR-001 (" in text and "| RT-001 (" in text
+
+
+def test_report_without_findings_has_no_evidence_chains(tmp_path):
+    assert "## Evidence Chains" not in _report(tmp_path)

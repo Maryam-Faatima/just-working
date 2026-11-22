@@ -154,6 +154,36 @@ def _changes_lines(findings: list[dict], names: dict[str, str]) -> list[str]:
     return ["| Entry | Name | Status | Confidence | Finding |", "|---|---|---|---|---|", *rows]
 
 
+def _chain_lines(graph: dict) -> list[str]:
+    """One row per finding: the path from the finding back to its trace, test, model entry and code."""
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    findings = [n for n in graph["nodes"] if n["kind"] == "finding"]
+    if not findings:
+        return []
+
+    def into(node_id: str, relation: str) -> list[dict]:
+        return [nodes[e["from"]] for e in graph["edges"]
+                if e["to"] == node_id and e["relation"] == relation and e["from"] in nodes]
+
+    lines = ["", "## Evidence Chains", "",
+             "Each row follows one finding back to the trace and test that produced it, "
+             "the model entry it judges and the code that supports that entry.", "",
+             "| Finding | Result | Trace (status) | Test (persona) | Model entry | Code evidence | Rules |",
+             "|---|---|---|---|---|---|---|"]
+    for f in sorted(findings, key=lambda n: str(n.get("finding_id", n["id"]))):
+        trace = next(iter(into(f["id"], "triggers")), None)
+        test = next(iter(into(trace["id"], "produces")), None) if trace else None
+        entry = nodes.get(f.get("target_id") or "")
+        code = [f"{c.get('file', '?')}:{c.get('lines', '')}" for c in into(entry["id"], "supports")] if entry else []
+        rules = [str(r.get("rule_id", "?")) for r in into(entry["id"], "defines")] if entry else []
+        trace_txt = f"{trace.get('trace_id')} ({trace.get('run_status') or 'n/a'})" if trace else "—"
+        test_txt = f"{test.get('test_id')} ({test.get('persona') or 'n/a'})" if test else "—"
+        entry_txt = f"{entry['id']} {entry.get('name', '')}".strip() if entry else "—"
+        lines.append(f"| {f.get('finding_id', f['id'])} | {f.get('result', '?')} | {trace_txt} | {test_txt} | "
+                     f"{entry_txt} | {'; '.join(code) or '—'} | {', '.join(rules) or '—'} |")
+    return lines
+
+
 def _judge_lines(judge, checks) -> list[str]:
     """What the LLM judge said about the last trace it scored, set beside the rule checks."""
     if not isinstance(judge, dict) or not isinstance(judge.get("overall_quality"), dict):
@@ -225,7 +255,7 @@ def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None
         for f in finding_nodes:
             result = f.get("result", "?")
             sev = f.get("severity", "?")
-            desc = (f.get("description") or "")[:100]
+            desc = f.get("description") or ""
             lines.append(
                 f"- **{f.get('finding_id', f['id'])}** "
                 f"[{result}] severity={sev} — {desc}"
@@ -242,6 +272,7 @@ def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None
                     f"  - Confidence change: {cc['from']:.2f} → {cc['to']:.2f}"
                 )
         lines += ["", "## Model Changes", "", *_changes_lines(finding_nodes, names)]
+        lines += _chain_lines(graph)
     else:
         lines += ["", "_No findings yet — the test stage produced no traces. Set the agent's entry point "
                       "(`run_config` in spec.json) and run the pipeline again._", ""]

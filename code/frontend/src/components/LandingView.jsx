@@ -194,11 +194,11 @@ export function LandingView({ onStartTesting }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} className="animate-pulse" />
                       <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                        Live Simulation Output
+                        Example Output
                       </span>
                     </div>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--ink-muted)', fontWeight: 600 }}>
-                      4 specs evaluated
+                      Illustrative example (not a live run)
                     </span>
                   </div>
 
