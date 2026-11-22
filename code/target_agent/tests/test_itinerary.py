@@ -1,4 +1,6 @@
 """Itinerary validation catches dates, budget, ordering, duplicates and inconsistencies."""
+from datetime import timedelta
+
 from app.schemas.tools import (
     CreateItineraryInput,
     FlightSearchOutput,
@@ -59,7 +61,8 @@ def test_budget_exceeded_detected(executor):
 
 def test_flight_and_hotel_inconsistencies_detected(executor):
     f, h, it = _inputs(executor)
-    wrong_flight = f.model_copy(update={"departure": f.departure.replace(day=1) if f.departure.day != 1 else f.departure.replace(day=2)})
+    delta = timedelta(days=1)
+    wrong_flight = f.model_copy(update={"departure": f.departure + delta, "arrival": f.arrival + delta})
     unavailable = h.model_copy(update={"availability": False})
     other_currency = h.model_copy(update={"currency": "AED"})
     assert "flight_date_mismatch" in _check(it, wrong_flight, h)
