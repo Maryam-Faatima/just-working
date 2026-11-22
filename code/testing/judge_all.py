@@ -127,13 +127,23 @@ def _uncached(prompt, system="", **_):
 
 
 def consistency(folder: Path, rubric: dict, repeats: int = 3, complete_json=None, limit: int | None = None) -> dict:
-    """Ask the judge for the overall score `repeats` times per trace, skipping the cache."""
+    """Ask the judge for the overall score `repeats` times per trace, skipping the cache.
+
+    A repeat the LLM could not answer (quota, outage) is the fallback score 3, not a judgment.
+    A trace with any such repeat is listed as incomplete and left out of the statistics, so an
+    outage can never look like the judge changing its mind.
+    """
     ask = complete_json or _uncached
-    rows = []
+    rows, incomplete = [], []
     completed = [(n, t) for n, t in load_traces(folder) if t.get("run_status") == "completed"]
     for filename, trace in completed[:limit]:
-        scores = [judge.run_judge(trace, {**rubric, "items": []}, complete_json=ask, use_llm=True)
-                  ["overall_quality"]["score"] for _ in range(repeats)]
+        overalls = [judge.run_judge(trace, {**rubric, "items": []}, complete_json=ask, use_llm=True)
+                    ["overall_quality"] for _ in range(repeats)]
+        scores = [o["score"] for o in overalls if not _undecided(o)]
+        if len(scores) < repeats:
+            incomplete.append({"filename": filename, "trace_id": str(trace["trace_id"]),
+                               "answered": len(scores), "repeats": repeats})
+            continue
         rows.append({"filename": filename, "trace_id": str(trace["trace_id"]), "scores": scores,
                      "spread": max(scores) - min(scores),
                      "same_verdict": len({judge._verdict(s) for s in scores}) == 1})
@@ -142,11 +152,13 @@ def consistency(folder: Path, rubric: dict, repeats: int = 3, complete_json=None
         "repeats": repeats,
         "summary": {
             "traces": len(rows),
+            "incomplete": len(incomplete),
             "identical_scores": sum(1 for r in rows if r["spread"] == 0),
             "same_verdict": sum(1 for r in rows if r["same_verdict"]),
             "mean_spread": round(sum(r["spread"] for r in rows) / len(rows), 3) if rows else None,
         },
         "traces": rows,
+        "incomplete_traces": incomplete,
     }
 
 

@@ -123,3 +123,20 @@ def test_cli_writes_both_files(tmp_path, monkeypatch, capsys):
     assert judge_all.main([str(folder), "--repeat", "2"]) == 0
     assert (folder / "judge_all.json").exists() and (folder / "judge_consistency.json").exists()
     assert judge_all.main([str(tmp_path / "missing")]) == 2
+
+
+def test_consistency_leaves_out_a_trace_the_llm_could_not_answer(tmp_path):
+    from understand import llm
+    folder = folder_with(tmp_path, [("a.json", trace("A")), ("b.json", trace("B"))])
+    calls = []
+
+    def flaky(prompt, system="", **_):
+        calls.append(1)
+        if "hello" in prompt and len(calls) > 3:      # the second trace hits an outage
+            raise llm.LLMError("quota")
+        return {"score": 5, "reasoning": "ok"}
+
+    result = consistency(folder, rubric(), repeats=3, complete_json=flaky)
+    assert result["summary"]["traces"] == 1 and result["summary"]["incomplete"] == 1
+    assert result["incomplete_traces"][0]["answered"] == 0
+    assert result["summary"]["mean_spread"] == 0      # the outage is not counted as the judge changing
