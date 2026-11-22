@@ -163,7 +163,8 @@ STAGES = [
     ("model", stage_model),
     ("infer", stage_infer),
     ("test", optional_stage("testing.runner", "run")),
-    ("check", optional_stage("testing.campaign", "run")), 
+    ("check", optional_stage("testing.campaign", "run")),
+    ("judge", optional_stage("testing.judge_all", "run")),
     ("report", optional_stage("evidence.report", "build")),
 ]
 

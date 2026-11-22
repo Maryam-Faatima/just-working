@@ -796,3 +796,24 @@ def test_report_keeps_full_descriptions_and_has_evidence_chains(tmp_path):
 
 def test_report_without_findings_has_no_evidence_chains(tmp_path):
     assert "## Evidence Chains" not in _report(tmp_path)
+
+
+def test_report_lists_the_judge_score_of_every_run(tmp_path):
+    rows = [
+        {"trace_id": "TR-1", "test_id": "GT-1", "run_status": "completed", "checks_failed": [],
+         "agreement": "judge_only", "overall_quality": {"score": 1, "verdict": "fail", "reasoning": "Stuck | looping.\nAgain."}},
+        {"trace_id": "TR-2", "test_id": "GT-2", "run_status": "crashed", "agreement": "not_judged",
+         "note": "The run crashed, nothing to judge."},
+    ]
+    summary = {"traces": 2, "judged": 1, "mean_overall_score": 1.0, "agreement_rate": 0.0,
+               "agreement": {"judge_only": 1}}
+    (tmp_path / "judge_all.json").write_text(json.dumps({"summary": summary, "traces": rows}), encoding="utf-8")
+    text = _report(tmp_path)
+    assert "## Judge Scores by Run" in text and "1 of 2 runs judged" in text
+    assert "| TR-1 | GT-1 | completed | 1/5 (fail) | none | judge_only | Stuck / looping. Again. |" in text
+    assert "| TR-2 | GT-2 | crashed | — | none | not_judged | The run crashed, nothing to judge. |" in text
+
+
+def test_report_ignores_a_broken_judge_all_file(tmp_path):
+    (tmp_path / "judge_all.json").write_text("{bad", encoding="utf-8")
+    assert "## Judge Scores by Run" not in _report(tmp_path)

@@ -65,6 +65,7 @@ def build(ctx: dict) -> str:
         graph, folder, ctx.get("name", "unknown"),
         judge=_read_json(folder / "judge_results.json"),
         checks=_read_json(folder / "check_results.json"),
+        judge_all=_read_json(folder / "judge_all.json"),
     )
 
     stats = graph["stats"]
@@ -184,6 +185,36 @@ def _chain_lines(graph: dict) -> list[str]:
     return lines
 
 
+def _cell(value) -> str:
+    """Text safe inside a markdown table cell."""
+    return str(value if value is not None else "—").replace("|", "/").replace("\n", " ").strip() or "—"
+
+
+def _judge_all_lines(judge_all) -> list[str]:
+    """The judge's overall score for every trace, beside what the rule checks found."""
+    if not isinstance(judge_all, dict) or not isinstance(judge_all.get("traces"), list):
+        return []
+    summary = judge_all.get("summary") or {}
+    agree = summary.get("agreement") or {}
+    lines = ["", "## Judge Scores by Run", "",
+             f"{summary.get('judged', 0)} of {summary.get('traces', 0)} runs judged, mean quality "
+             f"{summary.get('mean_overall_score', 'n/a')}/5, agreement with the rule checks "
+             f"{summary.get('agreement_rate', 'n/a')} (both fine {agree.get('both_ok', 0)}, both fail "
+             f"{agree.get('both_fail', 0)}, judge only {agree.get('judge_only', 0)}, checks only "
+             f"{agree.get('checks_only', 0)}).", "",
+             "| Trace | Test | Run | Quality | Checks failed | Agreement | Judge reasoning |",
+             "|---|---|---|---|---|---|---|"]
+    for r in judge_all["traces"]:
+        if not isinstance(r, dict):
+            continue
+        q = r.get("overall_quality") or {}
+        score = f"{q['score']}/5 ({q.get('verdict', '?')})" if "score" in q else "—"
+        lines.append(f"| {_cell(r.get('trace_id'))} | {_cell(r.get('test_id'))} | {_cell(r.get('run_status'))} | {score} | "
+                     f"{_cell(', '.join(r.get('checks_failed') or []) or 'none')} | {_cell(r.get('agreement'))} | "
+                     f"{_cell(q.get('reasoning') or r.get('note'))} |")
+    return lines
+
+
 def _judge_lines(judge, checks) -> list[str]:
     """What the LLM judge said about the last trace it scored, set beside the rule checks."""
     if not isinstance(judge, dict) or not isinstance(judge.get("overall_quality"), dict):
@@ -209,7 +240,7 @@ def _judge_lines(judge, checks) -> list[str]:
     return lines
 
 
-def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None) -> Path:
+def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None, judge_all=None) -> Path:
     """Write a human-readable markdown summary of the evidence graph."""
     stats = graph["stats"]
     entry_nodes = [n for n in graph["nodes"] if n["kind"] == "model_entry"]
@@ -278,6 +309,7 @@ def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None
                       "(`run_config` in spec.json) and run the pipeline again._", ""]
 
     lines += _judge_lines(judge, checks)
+    lines += _judge_all_lines(judge_all)
     lines.append("")
     report_path = folder / "report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")

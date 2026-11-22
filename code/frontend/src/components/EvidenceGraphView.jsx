@@ -395,6 +395,7 @@ export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
             ['5. Model Changes After Testing', 'Model Changes'],
             ['6. Evidence Chains (finding to trace to test to model entry to code)', 'Evidence Chains'],
             ['7. LLM Judge Assessment', 'LLM Judge'],
+            ['8. LLM Judge Score for Every Run', 'Judge Scores by Run'],
           ].map(([title, heading]) => {
             const body = reportSection(reportContent, heading);
             return body ? `<h2>${title}</h2>${mdToHtml(body)}` : '';
