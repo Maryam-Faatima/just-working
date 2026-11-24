@@ -213,9 +213,3 @@ export async function fetchModelChanges(agentName) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 }
-
-export async function fetchAgentRepro(agentName) {
-  const res = await fetch(`${API_BASE}/repro/${agentName}`);
-  if (!res.ok) return null;
-  return await res.json();
-}

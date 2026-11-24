@@ -4,13 +4,6 @@ Runs after testing.runner. For each test spec it takes the traces of its repeate
 checks every trace against the rubric, and reconciles all runs of that spec in one call,
 so the model, the findings and the report all see the same evidence.
 """
-<<<<<<< Updated upstream
-import json
-from pathlib import Path
-
-from testing.checks import run_checks
-from understand.model_store import ModelError
-=======
 import copy
 import json
 import os
@@ -19,7 +12,6 @@ from pathlib import Path
 
 from testing.checks import run_checks
 from understand.model_store import ModelError, ModelStore
->>>>>>> Stashed changes
 from understand.reconcile import reconcile
 
 
@@ -31,9 +23,6 @@ def group_traces(traces):
     return groups
 
 
-<<<<<<< Updated upstream
-def run_campaign(store, rubric, specs, traces, use_llm=True, complete_json=None):
-=======
 def scope_checks(checks, rubric, target_id):
     """Keep the checks that can speak for one entry, and mark which of them may move it.
 
@@ -94,7 +83,6 @@ def write_changes(folder, state, changes, done, total):
 
 def run_campaign(store, rubric, specs, traces, use_llm=True, complete_json=None,
                  changes=None, on_progress=None):
->>>>>>> Stashed changes
     """Check and reconcile every spec that has traces. Returns (findings, skipped, discovered).
 
     A spec that cannot be reconciled (for example its target is not in the model) is listed
@@ -106,13 +94,9 @@ def run_campaign(store, rubric, specs, traces, use_llm=True, complete_json=None,
         if not spec_traces:
             continue
         runs = [
-<<<<<<< Updated upstream
-            {"trace": t, "checks": run_checks(t, rubric, complete_json=complete_json, use_llm=use_llm)}
-=======
             {"trace": t, "checks": scope_checks(
                 run_checks(t, rubric, complete_json=complete_json, use_llm=use_llm),
                 rubric, spec.get("target_id"))}
->>>>>>> Stashed changes
             for t in spec_traces
         ]
         try:
@@ -122,34 +106,15 @@ def run_campaign(store, rubric, specs, traces, use_llm=True, complete_json=None,
             continue
         findings.append(result["finding"])
         discovered += result["discovered"]
-<<<<<<< Updated upstream
-=======
         if changes is not None:
             changes.append(change_record(store, result["finding"]))
             changes.extend(discovered_record(store, i, spec["test_id"]) for i in result["discovered"])
         if on_progress:
             on_progress()
->>>>>>> Stashed changes
     return findings, skipped, discovered
 
 
 def run(ctx):
-<<<<<<< Updated upstream
-    """Pipeline stage after 'test'. Updates ctx["store"] in place and sets ctx["findings"]."""
-    store, rubric, traces = ctx.get("store"), ctx.get("rubric"), ctx.get("traces")
-    if store is None or rubric is None:
-        return "skipped: no model or rubric"
-    if not traces:
-        return "skipped: no traces yet"
-    findings, skipped, discovered = run_campaign(
-        store, rubric, ctx.get("test_specs") or [], traces, use_llm=ctx.get("use_llm", True)
-    )
-    ctx["findings"] = findings
-    folder = ctx.get("folder")
-    if folder:
-        folder = Path(folder)
-        folder.mkdir(parents=True, exist_ok=True)
-=======
     """Pipeline stage after 'test'. Sets ctx["findings"] and replaces ctx["store"] with the updated model.
 
     The model from before this stage is kept in ctx["store_before_check"] and every run starts from
@@ -186,14 +151,9 @@ def run(ctx):
         write_changes(folder, "done", changes, total, total)
         # The updated model, next to the untouched V0. The store in ctx keeps its own version.
         ModelStore(store.agent, "v1", list(store.entries.values())).save(folder / "model_v1.json")
->>>>>>> Stashed changes
         (folder / "findings.json").write_text(json.dumps(findings, indent=2) + "\n", encoding="utf-8")
     failed = sum(1 for f in findings if f["result"] == "fail")
     detail = f"{len(findings)} finding(s), {failed} failed, {len(discovered)} discovered"
     if skipped:
         detail += f"; {len(skipped)} skipped ({skipped[0]['reason']})"
-<<<<<<< Updated upstream
     return detail
-=======
-    return detail
->>>>>>> Stashed changes

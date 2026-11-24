@@ -73,9 +73,6 @@ def test_run_sets_ctx_and_writes_findings(monkeypatch, tmp_path):
 
 
 def test_run_skips_cleanly_without_traces():
-<<<<<<< Updated upstream
-    assert campaign.run({"store": make_store(), "rubric": {}}) == "skipped: no traces yet"
-=======
     assert campaign.run({"store": make_store(), "rubric": {}}) == "skipped: no traces yet"
 
 
@@ -245,4 +242,3 @@ def test_the_model_from_before_the_stage_is_kept_untouched(monkeypatch):
     before = ctx["store_before_check"].get("cap_004")
     assert (before["status"], before["confidence"]) == ("unverified", 0.87)
     assert ctx["store"] is not ctx["store_before_check"]
->>>>>>> Stashed changes

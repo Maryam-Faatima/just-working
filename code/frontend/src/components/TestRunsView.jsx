@@ -113,81 +113,7 @@ function Conversation({ trace }) {
   );
 }
 
-
-const VERDICT_STYLE = {
-  pass: { bg: 'var(--status-confirmed)', label: 'P', name: 'pass' },
-  weak: { bg: 'var(--status-discovered)', label: 'W', name: 'weak' },
-  fail: { bg: 'var(--status-contradicted)', label: 'F', name: 'fail' },
-  unchecked: { bg: 'var(--ink-faint)', label: 'U', name: 'unchecked (rule could not be decided)' }
-};
-
-/** EH-6: how stable each test's verdict is across repeated runs, per test and per persona. */
-function ReproducibilityPanel({ repro }) {
-  const o = repro.overall || {};
-  const ran = (repro.tests || []).filter((t) => t.status === 'ran');
-  const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-  return (
-    <div style={{ ...card, padding: '20px 22px', marginBottom: '28px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
-        <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-          Reproducibility · verdict stability over {repro.repeats} runs
-        </h3>
-        <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>
-          {repro.meta?.mode}{repro.meta?.finished_at ? ` · ${repro.meta.finished_at.replace('T', ' ').slice(0, 16)}` : ''}
-        </span>
-      </div>
-      <p style={{ fontSize: '13px', color: 'var(--ink-secondary)', margin: '4px 0 16px' }}>
-        Each test was run {repro.repeats} times and every run was marked by the checks. Stability is how often the most common verdict came up; a flip is a change of verdict between consecutive runs.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
-        <Metric label="Mean stability" value={pct(o.mean_stability)} note={`${o.tests_run || 0} tests, ${o.runs || 0} runs`} color="var(--accent)" />
-        <Metric label="Fully stable" value={`${o.fully_stable_tests || 0}/${o.tests_run || 0}`} note="same verdict every run" color="var(--status-confirmed)" />
-        <Metric label="Verdict flips" value={o.total_flips || 0} note="changes between runs" color="var(--status-discovered)" />
-        <Metric label="Crashed / timed out" value={`${o.crashed || 0} / ${o.timeout || 0}`} note="runs" color="var(--status-contradicted)" />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {ran.map((t) => (
-          <div key={t.test_id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr auto 150px', gap: '12px', alignItems: 'center', fontSize: '12.5px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--ink-primary)' }}>{t.test_id}</span>
-            <span style={{ color: 'var(--ink-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.persona}>{t.persona}</span>
-            <span style={{ display: 'flex', gap: '3px' }}>
-              {t.runs.map((r) => {
-                const v = VERDICT_STYLE[r.verdict] || VERDICT_STYLE.unchecked;
-                const why = r.failed_rules?.length ? ` · failed ${r.failed_rules.join(', ')}` : '';
-                return (
-                  <span key={r.run} title={`Run ${r.run}: ${v.name}${why}`} style={{
-                    width: '20px', height: '20px', borderRadius: '5px', background: v.bg, color: '#fff',
-                    fontSize: '10.5px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-                  }}>{v.label}</span>
-                );
-              })}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ flex: 1, height: '8px', background: 'var(--bg-inset)', borderRadius: '6px', overflow: 'hidden' }}>
-                <span style={{ display: 'block', height: '100%', width: pct(t.stability), background: (VERDICT_STYLE[t.modal_verdict] || VERDICT_STYLE.unchecked).bg }} />
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, width: '38px', textAlign: 'right' }}>{pct(t.stability)}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-      {repro.by_persona?.length > 0 && (
-        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {repro.by_persona.map((p) => (
-            <span key={p.persona} style={{ fontSize: '12px', padding: '4px 10px', borderRadius: 'var(--radius-full)', background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)', color: 'var(--ink-secondary)' }}>
-              {p.persona}: <strong style={{ color: 'var(--ink-primary)' }}>{pct(p.mean_stability)}</strong>
-            </span>
-          ))}
-        </div>
-      )}
-      {repro.simulator_note && (
-        <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--ink-muted)' }}>Note: {repro.simulator_note}</div>
-      )}
-    </div>
-  );
-}
-
-export function TestRunsView({ testsData, testRunData, reproData, currentAgent }) {
+export function TestRunsView({ testsData, testRunData, currentAgent }) {
   const tests = Array.isArray(testsData) ? testsData : [];
   const results = Object.fromEntries((testRunData?.tests || []).map((r) => [r.test_id, r]));
   const [selectedId, setSelectedId] = useState(tests[0]?.test_id || null);
@@ -245,8 +171,6 @@ export function TestRunsView({ testsData, testRunData, reproData, currentAgent }
           Real conversations with the agent under test: each test is played by a persona, repeated to check reproducibility, and every turn is recorded with the tools the agent called.
         </p>
       </div>
-
-      {reproData?.overall && <ReproducibilityPanel repro={reproData} />}
 
       {testRunData?.simulator_note && (
         <div style={{

@@ -60,11 +60,7 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     assert not (folder / "spec.json").exists()  # no spec, so no spec copy
     assert summary["ok"] is True
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
-<<<<<<< Updated upstream
-                             "infer": "skipped", "test": "ok", "check": "ok", "report": "ok"}
-=======
                              "infer": "skipped", "test": "ok", "check": "ok", "judge": "ok", "report": "ok"}
->>>>>>> Stashed changes
     test_stage = next(r for r in summary["stages"] if r["stage"] == "test")
     # the generator (EH-1) writes one test per tool; without a run config the agent cannot be started
     assert test_stage["detail"] == "generated 2 seed test(s); not run: no entry point: add langgraph.json, or answer the Phase 0 start-up questions (run_config)"

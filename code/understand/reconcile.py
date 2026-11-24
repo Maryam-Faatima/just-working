@@ -105,23 +105,15 @@ def _apply(store, entry_id, outcome, infos, test_id):
     done = [r for r in infos if r["status"] == "completed"]
     if outcome == "contradicted":
         for r in done:
-<<<<<<< Updated upstream
-            if not r["failed"] and r["exercised"]:
-                store.add_evidence(entry_id, test_id, r["trace_id"])
-        steps = [("contradicted", r) for r in done if r["failed"]]
-=======
             if not r["moving"] and r["exercised"]:
                 store.add_evidence(entry_id, test_id, r["trace_id"])
         steps = [("contradicted", r) for r in done if r["moving"]]
->>>>>>> Stashed changes
     elif outcome == "confirmed":
         steps = [("confirmed", r) for r in done if r["exercised"]]
     else:
         steps = [("unreachable", r) for r in done]
     for step_outcome, run in steps:
         store.apply_outcome(entry_id, step_outcome, test_id=test_id, trace_id=run["trace_id"])
-<<<<<<< Updated upstream
-=======
 
 
 def _keep_evidence(store, entry_id, infos, test_id):
@@ -131,7 +123,6 @@ def _keep_evidence(store, entry_id, infos, test_id):
             store.add_evidence(entry_id, test_id, r["trace_id"])
 
 
->>>>>>> Stashed changes
 def discover_new(store, spec, runs):
     """Add a `discovered` capability for every tool the agent called that the model lacks."""
     known = set()
