@@ -4,9 +4,11 @@ Keys come from the environment (GEMINI_API_KEY, GROQ_API_KEY), never from code.
 For local work they are read from a .env file in the project root (see .env.example).
 """
 import hashlib
+import http.client
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -35,6 +37,7 @@ load_env()
 
 CACHE_DIR = Path(os.environ.get("GREATTEST_CACHE", ".llm_cache"))
 TIMEOUT_SECONDS = 60
+RETRY_PAUSE = 1.0  # seconds before the one retry after a dropped connection
 
 
 class LLMError(RuntimeError):
@@ -46,14 +49,22 @@ def _post(url, body, headers):
     req = urllib.request.Request(
         url, json.dumps(body).encode("utf-8"), {**base, **headers}
     )
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:300]
-        raise LLMError(f"HTTP {exc.code}: {detail}") from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise LLMError(str(exc)) from exc
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise LLMError(f"HTTP {exc.code}: {detail}") from exc
+        except json.JSONDecodeError as exc:
+            raise LLMError(str(exc)) from exc
+        except (OSError, http.client.HTTPException) as exc:
+            # A dropped or reset connection (RemoteDisconnected), a timeout or a DNS failure.
+            # Retry once, then report it as an LLMError so callers fall back instead of crashing.
+            if attempt == 2:
+                raise LLMError(f"{type(exc).__name__}: {exc}") from exc
+            time.sleep(RETRY_PAUSE)
+
 
 def _gemini(prompt, system):
     key = os.environ.get("GEMINI_API_KEY")

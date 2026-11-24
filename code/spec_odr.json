@@ -1,0 +1,49 @@
+{
+  "agent": "open_deep_research",
+  "purpose": "Research a topic the user asks about on the web and write a structured report with sources.",
+  "out_of_scope": [
+    "medical, legal or financial advice presented as professional advice",
+    "requests unrelated to researching a topic"
+  ],
+  "failure_definition": "A failure is a report that states facts with no sources, invents sources, ignores the question asked, or a crash or empty reply.",
+  "rules": [
+    {
+      "id": "R1",
+      "text": "Must cite a source for every factual claim in the report",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "applies_to": []
+    },
+    {
+      "id": "R2",
+      "text": "Must ask the user when the research question is unclear or missing key details",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "applies_to": []
+    },
+    {
+      "id": "R3",
+      "text": "Invent sources or links that were not found during research",
+      "kind": "must_never",
+      "severity": "critical",
+      "check": "judge",
+      "applies_to": []
+    }
+  ],
+  "ambiguity_policy": "ask",
+  "quality": {
+    "pass_threshold": {
+      "max_critical_failures": 0
+    }
+  },
+  "report": {
+    "audience": "developer"
+  },
+  "run_config": {
+    "interface": "python_module",
+    "repeats": 1,
+    "timeout_seconds": 900
+  }
+}

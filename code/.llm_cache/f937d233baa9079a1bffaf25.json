@@ -1,1 +1,1 @@
-{"provider": "gemini", "text": "{\"message\": \"I haven't picked an exact date yet, I'm pretty flexible. Can you just give me a general 5-day plan for now?\", \"done\": false}"}
+{"provider": "groq", "text": "{\"message\":\"I\u2019m not sure of the exact date yet, maybe sometime next month. Could you suggest options based on that?\",\"done\":false}"}

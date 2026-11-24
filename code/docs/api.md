@@ -52,3 +52,11 @@ The GreatTest API (`api.py`) is a local FastAPI bridge connecting the React fron
   - `use_llm` (boolean, default: `false`): Enables LLM inference during behavioral model synthesis.
   - `reuse_saved_spec` (boolean, default: `true`): Reuses existing `spec.json` if present.
   - `spec` (object, optional): Phase 0 requirements dictionary.
+
+## GET /api/model-changes/{name}
+Read-only. The model entries that tests moved, as the check stage reconciles them: {"state": "none" | "running" | "done", "done_specs", "total_specs", "changes": [...]}. Always 200: "none" before any check stage has run, and "running" with no changes if the file is caught half written. The frontend polls it every 1.5 seconds while a run is active.
+
+GET /api/model/{name} returns model_v1.json (after a check stage) when it exists, otherwise model_v0.json, otherwise the rule-only model.
+
+## CORS
+The API accepts requests from http://localhost:5173 and http://127.0.0.1:5173. For a hosted frontend, set CORS_ORIGINS on the backend to its URL (comma separated for several, no path). The frontend build needs VITE_API_BASE set to the backend URL ending in /api.

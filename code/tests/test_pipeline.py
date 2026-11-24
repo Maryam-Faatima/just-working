@@ -60,10 +60,14 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
     assert not (folder / "spec.json").exists()  # no spec, so no spec copy
     assert summary["ok"] is True
     assert statuses(summary) == {"spec": "skipped", "scan": "ok", "callgraph": "ok", "model": "ok",
+<<<<<<< Updated upstream
                              "infer": "skipped", "test": "ok", "check": "ok", "report": "ok"}
+=======
+                             "infer": "skipped", "test": "ok", "check": "ok", "judge": "ok", "report": "ok"}
+>>>>>>> Stashed changes
     test_stage = next(r for r in summary["stages"] if r["stage"] == "test")
     # the generator (EH-1) writes one test per tool; without a run config the agent cannot be started
-    assert test_stage["detail"] == "generated 2 seed test(s); not run: no entry point: answer the Phase 0 start-up questions (run_config) to run tests"
+    assert test_stage["detail"] == "generated 2 seed test(s); not run: no entry point: add langgraph.json, or answer the Phase 0 start-up questions (run_config)"
     assert len(json.loads((folder / "test_specs.json").read_text(encoding="utf-8"))) == 2
     assert len(lines) == len(summary["stages"])
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
@@ -335,3 +339,16 @@ def test_user_supplied_name_is_made_safe_as_a_folder_name(repo, tmp_path):
     assert summary["agent"] == "evil-name"
     assert (tmp_path / "out" / "evil-name" / "run_summary.json").exists()
     assert not (tmp_path.parent / "evil name").exists()
+
+
+def test_stage_scan_clears_the_last_runs_model_changes(monkeypatch, tmp_path):
+    (tmp_path / "model_changes.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "model_v1.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(pipeline, "scan_repo", lambda root: {
+        "files_scanned": 0, "tools": [], "nodes": [], "edges": [], "errors": []})
+    monkeypatch.setattr(pipeline.context_files, "list_context_files", lambda root: [])
+    monkeypatch.setattr(pipeline, "head_commit", lambda root: "abc")
+    monkeypatch.setattr(pipeline, "write_scan_outputs", lambda scan, name, out: tmp_path)
+    pipeline.stage_scan({"repo_root": tmp_path, "source": "x", "name": "demo", "out": None})
+    assert not (tmp_path / "model_changes.json").exists()
+    assert not (tmp_path / "model_v1.json").exists()

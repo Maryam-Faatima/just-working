@@ -27,6 +27,7 @@ from jsonschema import Draft202012Validator
 
 from understand.confidence import baseline_confidence
 from understand.model_store import validate_entry
+from understand.rule_checks import infer_check_type
 
 ROOT = Path(__file__).resolve().parent.parent
 _SPEC_VALIDATOR = Draft202012Validator(
@@ -224,6 +225,9 @@ def build_rubric(spec=None, rule_entries=None, agent=None):
                 "severity": rule["severity"], "check": rule.get("check", "judge"), "source": "developer"}
         if rule.get("applies_to"):
             item["applies_to"] = list(rule["applies_to"])
+        check_type = rule.get("check_type") or infer_check_type(item)
+        if check_type:
+            item["check_type"] = check_type
         if rule["id"] in rule_entries:
             item["target_id"] = rule_entries[rule["id"]]
         items.append(item)

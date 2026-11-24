@@ -91,6 +91,24 @@ def test_unreachable_needs_repeated_attempts():
     assert store.get("cap_004")["confidence"] < 0.87
 
 
+def test_confirmed_entry_is_not_undone_by_a_later_test_that_never_reached_the_tool():
+    store = make_store()
+    reconcile(store, SPEC, [run([PASS])])
+    confirmed = dict(store.get("cap_004"))
+    later = reconcile(store, SPEC, [run([PASS], trace_id=f"TR-{i}", tools=()) for i in range(3)])
+    after = store.get("cap_004")
+    assert (after["status"], after["confidence"]) == (confirmed["status"], confirmed["confidence"])
+    assert "stays confirmed" in later["finding"]["description"]
+    assert "status_change" not in later["finding"]
+
+
+def test_confirmed_entry_can_still_be_contradicted():
+    store = make_store()
+    reconcile(store, SPEC, [run([PASS])])
+    reconcile(store, SPEC, [run([FAIL])])
+    assert store.get("cap_004")["status"] == "contradicted"
+
+
 def test_unknown_tool_is_added_as_discovered():
     store = make_store()
     result = reconcile(store, SPEC, [run([PASS], tools=("cancel_booking", "check_loyalty_status"))])

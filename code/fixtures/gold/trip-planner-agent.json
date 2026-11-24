@@ -1,0 +1,20 @@
+{
+  "agent": "trip-planner-agent",
+  "source": "https://github.com/AnshikaaaSh/trip-planner-agent (commit ba03557)",
+  "labelled_by": "Maryam Fatima, from the source code, 21 Nov 2026",
+  "tools": ["search_flights", "search_hotels", "search_activities"],
+  "workflow_steps": [
+    "input_guardrail", "booking_agent", "activity_agent", "generate", "budget_critic", "output_guardrail"
+  ],
+  "constraints": [
+    {"text": "Requests with blocked topics are rejected", "file": "guardrails.py", "lines": "27-37"},
+    {"text": "Off-topic requests are rejected", "file": "guardrails.py", "lines": "38-40"},
+    {"text": "Requests that are too short or vague are rejected", "file": "guardrails.py", "lines": "42-43"},
+    {"text": "A blocked request ends the run instead of continuing", "file": "graph.py", "lines": "52-62"},
+    {"text": "The itinerary must contain the required fields", "file": "guardrails.py", "lines": "56-59"},
+    {"text": "The itinerary total cost must not exceed the budget", "file": "guardrails.py", "lines": "61-68"},
+    {"text": "The itinerary must not include excluded activities", "file": "guardrails.py", "lines": "69-72"},
+    {"text": "The itinerary must not contain personal data (phone or email)", "file": "guardrails.py", "lines": "74-75"},
+    {"text": "An over-budget or unapproved itinerary is regenerated up to a retry limit", "file": "graph.py", "lines": "154-165"}
+  ]
+}

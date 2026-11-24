@@ -5,6 +5,8 @@ import { Phase0RubricView } from './components/Phase0RubricView';
 import { ScanToolsView } from './components/ScanToolsView';
 import { CallGraphView } from './components/CallGraphView';
 import { BehavioralModelView } from './components/BehavioralModelView';
+import { LiveModelChanges } from './components/LiveModelChanges';
+import { TestRunsJudgeView } from './components/TestRunsJudgeView';
 import { EvidenceGraphView } from './components/EvidenceGraphView';
 import { TestRunsView } from './components/TestRunsView';
 import { RequirementsQuestionnaireView } from './components/RequirementsQuestionnaireView';
@@ -31,7 +33,7 @@ const SCREENS = [
   { id: 'scan', label: 'AST Scan & Tools' },
   { id: 'callgraph', label: 'Call Graph' },
   { id: 'model', label: 'Behavioral Model V0' },
-  { id: 'test', label: 'Test Runs' },
+  { id: 'test', label: 'Test Runs & LLM Judge' },
   { id: 'evidence', label: 'Evidence Graph' }
 ];
 
@@ -477,7 +479,7 @@ function App() {
                   <PipelineSummaryView
                     summaryData={summaryData}
                     onNavigateStage={(stage) => {
-                      const target = stage === 'report' ? 'evidence' : stage;
+                      const target = stage === 'report' ? 'evidence' : stage === 'test' ? 'tests' : stage;
                       const idx = SCREENS.findIndex(s => s.id === target);
                       if (idx !== -1) {
                         React.startTransition(() => {
@@ -512,14 +514,14 @@ function App() {
                 {currentScreenId === 'model' && (
                   <BehavioralModelView
                     modelData={modelData}
+                    currentAgent={currentAgent}
                   />
                 )}
 
                 {currentScreenId === 'test' && (
-                  <TestRunsView
-                    testsData={testsData}
-                    testRunData={testRunData}
+                  <TestRunsJudgeView
                     currentAgent={currentAgent}
+                    rubricData={rubricData}
                   />
                 )}
 
@@ -535,6 +537,11 @@ function App() {
           </>
         )}
       </main>
+
+      {/* Live model flips while a run is in progress (polls /api/model-changes) */}
+      {runStatusMessage && currentAgent && (
+        <LiveModelChanges agentName={currentAgent} active floating />
+      )}
 
       {/* Real-Time Run Progress Popup / Toast at Bottom */}
       {runStatusMessage && (

@@ -15,7 +15,23 @@ The travel agent in `target_agent/` keeps its own backend (`TravelAgentBackend`)
 - It returns the reply as plain text, or a JSON object `{"reply": "...", "tool_calls": [{"name": "...", "arguments": {...}, "result": ...}]}`. `tool_calls` is optional, but checks that look for tool use (for example "confirm before booking") can only work if the agent reports its tools.
 - Over HTTP, a plain-text body is taken as the reply. HTTP status 400 or above counts as a crash.
 
-The smallest example is `fixtures/agents/simple_agent/agent.py`.
+Example agents beyond the travel agent:
+
+- `fixtures/agents/simple_agent/agent.py`: the smallest plain-function example.
+- `fixtures/agents/langchain_agent/agent.py`: an order-support agent built the standard LangGraph way (tools made with `@tool`, a `StateGraph` over `MessagesState`, a `ToolNode` and `tools_condition`), tested with no wrapper. Its seed tests (`fixtures/langchain_seed_specs.json`) and rubric (`fixtures/langchain_rubric.json`) find its planted flaw: it cancels orders without asking the customer to confirm.
+
+## LangChain and LangGraph agents (decision 59)
+
+A LangChain agent needs no wrapper: the entry point can name the LangChain object itself, for example `app/graph.py:graph` for a compiled LangGraph app. `testing/langchain_support.py` recognises any object with an `.invoke` method:
+
+| Agent | How it is called | Where the tool calls come from |
+|---|---|---|
+| LangGraph app (compiled `StateGraph`, `create_react_agent`) | `invoke({"messages": [...]})` | each `AIMessage.tool_calls` entry, paired with the `ToolMessage` that answered it |
+| `AgentExecutor`-style agent (an `input` key) | `invoke({"input": ..., "chat_history": [...]})`, with `chat_history` only if the agent accepts it | `intermediate_steps`, when the agent is created with `return_intermediate_steps=True` |
+
+Because every turn runs in a fresh child process, earlier turns are replayed in order, each with the agent's own earlier replies carried forward; only the last turn's tool calls are reported for that turn. With a real LLM, a replayed turn can come out differently, and each turn costs one call per earlier message. The reply is the last AI message.
+
+None of the testing code (generator, simulator, runner, checks, reproducibility study) contains anything specific to the travel agent; it works from the rubric, the model, the Phase 0 answers and the run config.
 
 ## Failures
 

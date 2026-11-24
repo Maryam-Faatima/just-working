@@ -45,26 +45,28 @@ def build(ctx: dict) -> str:
     rubric: dict | None = ctx.get("rubric")
     spec: dict | None = ctx.get("spec")
 
-    # Findings may come from the testing lane via ctx, or from a findings.json
-    # written to disk by a previous run.
-    findings: list[dict] = list(ctx.get("findings") or [])
-    if not findings:
-        findings_path = folder / "findings.json"
-        if findings_path.exists():
-            try:
-                findings = json.loads(findings_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, json.JSONDecodeError):
-                findings = []
+    # Everything the testing lane produced comes from ctx, or from the files it wrote to the
+    # agent's folder when the report stage runs on its own.
+    findings = _from_ctx_or_disk(ctx, "findings", folder / "findings.json")
+    test_specs = _from_ctx_or_disk(ctx, "test_specs", folder / "test_specs.json")
+    traces = list(ctx.get("traces") or []) or _read_traces(folder / "traces")
 
     graph = build_graph(
         store_dict=store.to_dict(),
         rubric=rubric,
         spec=spec,
         findings=findings,
+        test_specs=test_specs,
+        traces=traces,
     )
 
     graph_path = save_graph(graph, folder)
-    report_path = _write_report(graph, folder, ctx.get("name", "unknown"))
+    report_path = _write_report(
+        graph, folder, ctx.get("name", "unknown"),
+        judge=_read_json(folder / "judge_results.json"),
+        checks=_read_json(folder / "check_results.json"),
+        judge_all=_read_json(folder / "judge_all.json"),
+    )
 
     stats = graph["stats"]
     return (
@@ -75,11 +77,175 @@ def build(ctx: dict) -> str:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _write_report(graph: dict, folder: Path, agent: str) -> Path:
+def _read_json(path: Path):
+    """Parsed JSON file, or None if it is missing or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _from_ctx_or_disk(ctx: dict, key: str, path: Path) -> list[dict]:
+    """A list from ctx[key], else from a JSON list on disk, else empty."""
+    value = list(ctx.get(key) or [])
+    if value:
+        return value
+    data = _read_json(path)
+    return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+
+
+def _read_traces(traces_dir: Path) -> list[dict]:
+    traces = []
+    for path in sorted(traces_dir.glob("*.json")) if traces_dir.is_dir() else []:
+        data = _read_json(path)
+        if isinstance(data, dict) and data.get("trace_id"):
+            traces.append(data)
+    return traces
+
+
+def _percent(part: int, whole: int) -> str:
+    return f"{round(100 * part / whole)}%" if whole else "n/a"
+
+
+def _coverage_lines(graph: dict) -> list[str]:
+    """Which model entries a test (or finding) reached, by entry type."""
+    entries = [n for n in graph["nodes"] if n["kind"] == "model_entry"]
+    reached = {e["from"] for e in graph["edges"] if e["relation"] == "targeted_by"}
+    reached |= {e["from"] for e in graph["edges"] if e["relation"] == "has_finding"}
+    by_type: dict[str, list[int]] = {}
+    for n in entries:
+        row = by_type.setdefault(n.get("entry_type", "?"), [0, 0])
+        row[0] += 1
+        row[1] += n["id"] in reached
+    stats = graph["stats"]
+    lines = ["| Entry type | Entries | Tested | Coverage |", "|---|---|---|---|"]
+    for etype, (total, tested) in sorted(by_type.items()):
+        lines.append(f"| {etype} | {total} | {tested} | {_percent(tested, total)} |")
+    total = sum(r[0] for r in by_type.values())
+    tested = sum(r[1] for r in by_type.values())
+    lines.append(f"| **All** | **{total}** | **{tested}** | **{_percent(tested, total)}** |")
+    lines += ["", f"Tests: {stats.get('test_spec_nodes', 0)}, traces: {stats.get('trace_nodes', 0)}."]
+    return lines
+
+
+def _severity_lines(findings: list[dict]) -> list[str]:
+    order = ["critical", "major", "minor", "info"]
+    counts = {sev: [0, 0] for sev in order}   # [failed, passed]
+    for f in findings:
+        row = counts.get(f.get("severity"))
+        if row is not None:
+            row[0 if f.get("result") == "fail" else 1] += 1
+    lines = ["| Severity | Failed | Passed |", "|---|---|---|"]
+    lines += [f"| {sev} | {counts[sev][0]} | {counts[sev][1]} |" for sev in order]
+    return lines
+
+
+def _changes_lines(findings: list[dict], names: dict[str, str]) -> list[str]:
+    rows = []
+    for f in sorted(findings, key=lambda x: str(x.get("target_id"))):
+        sc, cc = f.get("status_change"), f.get("confidence_change")
+        if not (sc or cc):
+            continue
+        status = f"`{sc['from']}` → `{sc['to']}`" if sc else "—"
+        conf = f"{cc['from']:.2f} → {cc['to']:.2f}" if cc else "—"
+        target = f.get("target_id", "?")
+        rows.append(f"| {target} | {names.get(target, '')} | {status} | {conf} | {f.get('finding_id', '')} |")
+    if not rows:
+        return ["_No model entry changed._"]
+    return ["| Entry | Name | Status | Confidence | Finding |", "|---|---|---|---|---|", *rows]
+
+
+def _chain_lines(graph: dict) -> list[str]:
+    """One row per finding: the path from the finding back to its trace, test, model entry and code."""
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    findings = [n for n in graph["nodes"] if n["kind"] == "finding"]
+    if not findings:
+        return []
+
+    def into(node_id: str, relation: str) -> list[dict]:
+        return [nodes[e["from"]] for e in graph["edges"]
+                if e["to"] == node_id and e["relation"] == relation and e["from"] in nodes]
+
+    lines = ["", "## Evidence Chains", "",
+             "Each row follows one finding back to the trace and test that produced it, "
+             "the model entry it judges and the code that supports that entry.", "",
+             "| Finding | Result | Trace (status) | Test (persona) | Model entry | Code evidence | Rules |",
+             "|---|---|---|---|---|---|---|"]
+    for f in sorted(findings, key=lambda n: str(n.get("finding_id", n["id"]))):
+        trace = next(iter(into(f["id"], "triggers")), None)
+        test = next(iter(into(trace["id"], "produces")), None) if trace else None
+        entry = nodes.get(f.get("target_id") or "")
+        code = [f"{c.get('file', '?')}:{c.get('lines', '')}" for c in into(entry["id"], "supports")] if entry else []
+        rules = [str(r.get("rule_id", "?")) for r in into(entry["id"], "defines")] if entry else []
+        trace_txt = f"{trace.get('trace_id')} ({trace.get('run_status') or 'n/a'})" if trace else "—"
+        test_txt = f"{test.get('test_id')} ({test.get('persona') or 'n/a'})" if test else "—"
+        entry_txt = f"{entry['id']} {entry.get('name', '')}".strip() if entry else "—"
+        lines.append(f"| {f.get('finding_id', f['id'])} | {f.get('result', '?')} | {trace_txt} | {test_txt} | "
+                     f"{entry_txt} | {'; '.join(code) or '—'} | {', '.join(rules) or '—'} |")
+    return lines
+
+
+def _cell(value) -> str:
+    """Text safe inside a markdown table cell."""
+    return str(value if value is not None else "—").replace("|", "/").replace("\n", " ").strip() or "—"
+
+
+def _judge_all_lines(judge_all) -> list[str]:
+    """The judge's overall score for every trace, beside what the rule checks found."""
+    if not isinstance(judge_all, dict) or not isinstance(judge_all.get("traces"), list):
+        return []
+    summary = judge_all.get("summary") or {}
+    agree = summary.get("agreement") or {}
+    lines = ["", "## Judge Scores by Run", "",
+             f"{summary.get('judged', 0)} of {summary.get('traces', 0)} runs judged, mean quality "
+             f"{summary.get('mean_overall_score', 'n/a')}/5, agreement with the rule checks "
+             f"{summary.get('agreement_rate', 'n/a')} (both fine {agree.get('both_ok', 0)}, both fail "
+             f"{agree.get('both_fail', 0)}, judge only {agree.get('judge_only', 0)}, checks only "
+             f"{agree.get('checks_only', 0)}).", "",
+             "| Trace | Test | Run | Quality | Checks failed | Agreement | Judge reasoning |",
+             "|---|---|---|---|---|---|---|"]
+    for r in judge_all["traces"]:
+        if not isinstance(r, dict):
+            continue
+        q = r.get("overall_quality") or {}
+        score = f"{q['score']}/5 ({q.get('verdict', '?')})" if "score" in q else "—"
+        lines.append(f"| {_cell(r.get('trace_id'))} | {_cell(r.get('test_id'))} | {_cell(r.get('run_status'))} | {score} | "
+                     f"{_cell(', '.join(r.get('checks_failed') or []) or 'none')} | {_cell(r.get('agreement'))} | "
+                     f"{_cell(q.get('reasoning') or r.get('note'))} |")
+    return lines
+
+
+def _judge_lines(judge, checks) -> list[str]:
+    """What the LLM judge said about the last trace it scored, set beside the rule checks."""
+    if not isinstance(judge, dict) or not isinstance(judge.get("overall_quality"), dict):
+        return []
+    overall = judge["overall_quality"]
+    check_list = checks.get("checks") if isinstance(checks, dict) else checks
+    check_list = [c for c in check_list or [] if isinstance(c, dict)]
+    failed_checks = [c.get("rule_id", "?") for c in check_list if c.get("verdict") == "fail"]
+    failed_rules = [r.get("rule_id", "?") for r in judge.get("rule_scores", []) if r.get("verdict") == "fail"]
+    lines = [
+        "",
+        "## LLM Judge",
+        "",
+        f"Trace {judge.get('trace_id', '?')}: overall quality {overall.get('score', '?')}/5 "
+        f"({overall.get('verdict', '?')}). {overall.get('reasoning', '')}".strip(),
+        "",
+        f"Rule checks failed: {', '.join(failed_checks) or 'none'}. "
+        f"Judge rule scores failed: {', '.join(failed_rules) or 'none'}.",
+    ]
+    if overall.get("verdict") == "fail" and not failed_checks and check_list:
+        lines += ["", "**Flag:** the judge rates this conversation as failing, but no rule check failed. "
+                      "The rubric may be missing a rule for this behaviour."]
+    return lines
+
+
+def _write_report(graph: dict, folder: Path, agent: str, judge=None, checks=None, judge_all=None) -> Path:
     """Write a human-readable markdown summary of the evidence graph."""
     stats = graph["stats"]
     entry_nodes = [n for n in graph["nodes"] if n["kind"] == "model_entry"]
     finding_nodes = [n for n in graph["nodes"] if n["kind"] == "finding"]
+    names = {n["id"]: n.get("name", "") for n in entry_nodes}
 
     lines = [
         f"# Evidence Report — {agent}",
@@ -98,6 +264,10 @@ def _write_report(graph: dict, folder: Path, agent: str) -> Path:
         f"| Findings | {stats.get('finding_nodes', 0)} |",
         f"| **Total edges** | **{stats['edges']}** |",
         "",
+        "## Coverage",
+        "",
+        *_coverage_lines(graph),
+        "",
         "## Model Entries",
         "",
     ]
@@ -112,15 +282,18 @@ def _write_report(graph: dict, folder: Path, agent: str) -> Path:
         )
 
     if finding_nodes:
-        lines += ["", "## Findings", ""]
+        lines += ["", "## Findings", "", *_severity_lines(finding_nodes), ""]
         for f in finding_nodes:
             result = f.get("result", "?")
             sev = f.get("severity", "?")
-            desc = (f.get("description") or "")[:100]
+            desc = f.get("description") or ""
             lines.append(
                 f"- **{f.get('finding_id', f['id'])}** "
                 f"[{result}] severity={sev} — {desc}"
             )
+            repro = f.get("reproducibility")
+            if repro:
+                lines.append(f"  - Reproducibility: {repro['failures']} of {repro['runs']} runs failed")
             sc = f.get("status_change")
             if sc:
                 lines.append(f"  - Status change: `{sc['from']}` → `{sc['to']}`")
@@ -129,9 +302,14 @@ def _write_report(graph: dict, folder: Path, agent: str) -> Path:
                 lines.append(
                     f"  - Confidence change: {cc['from']:.2f} → {cc['to']:.2f}"
                 )
+        lines += ["", "## Model Changes", "", *_changes_lines(finding_nodes, names)]
+        lines += _chain_lines(graph)
     else:
-        lines += ["", "_No findings yet — run the testing lane to populate._", ""]
+        lines += ["", "_No findings yet — the test stage produced no traces. Set the agent's entry point "
+                      "(`run_config` in spec.json) and run the pipeline again._", ""]
 
+    lines += _judge_lines(judge, checks)
+    lines += _judge_all_lines(judge_all)
     lines.append("")
     report_path = folder / "report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")

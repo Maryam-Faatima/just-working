@@ -653,3 +653,167 @@ def test_build_passes_rubric_and_spec_to_graph(tmp_path):
     rule_nodes = [n for n in graph["nodes"] if n["kind"] == "developer_rule"]
     assert len(rule_nodes) == 1
     assert rule_nodes[0]["description"] == "Must confirm before cancelling."
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 14. AY-3 / AY-4: real-run wiring and report sections
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _dangling(graph):
+    ids = _ids(graph)
+    return [e for e in graph["edges"] if e["from"] not in ids or e["to"] not in ids]
+
+
+def test_finding_alone_still_gives_the_full_chain_without_dangling_edges():
+    g = build_graph(_store_dict(), findings=[_finding()])
+    assert {"test:RT-001", "trace:TR-001", "finding:F-001"} <= _ids(g)
+    assert {("test:RT-001", "trace:TR-001", "produces"),
+            ("trace:TR-001", "finding:F-001", "triggers"),
+            ("cap_001", "test:RT-001", "targeted_by"),
+            ("cap_001", "finding:F-001", "has_finding")} <= _rels(g)
+    assert _dangling(g) == []
+
+
+def test_rich_test_and_trace_nodes_win_over_finding_placeholders():
+    g = build_graph(_store_dict(), findings=[_finding()], test_specs=[_test_spec()], traces=[_trace()])
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert nodes["test:RT-001"]["persona"] == "curious traveller"
+    assert nodes["trace:TR-001"]["turns"] == 2
+
+
+def test_finding_with_unknown_target_has_no_dangling_edges():
+    g = build_graph(_store_dict(), findings=[_finding(target_id="cap_999")])
+    assert _dangling(g) == []
+    assert not any(e["relation"] == "has_finding" for e in g["edges"])
+
+
+def _ctx(tmp_path, **extra):
+    return {"store": _make_store(), "folder": tmp_path, "name": "demo", **extra}
+
+
+def test_build_forwards_test_specs_and_traces_from_ctx(tmp_path):
+    build(_ctx(tmp_path, findings=[_finding()], test_specs=[_test_spec()], traces=[_trace()]))
+    g = json.loads((tmp_path / "evidence_graph.json").read_text(encoding="utf-8"))
+    assert g["stats"]["test_spec_nodes"] == 1 and g["stats"]["trace_nodes"] == 1
+    assert {"test:RT-001", "trace:TR-001", "finding:F-001"} <= _ids(g)
+    assert _dangling(g) == []
+
+
+def test_build_reads_specs_and_traces_from_the_agent_folder(tmp_path):
+    (tmp_path / "findings.json").write_text(json.dumps([_finding()]), encoding="utf-8")
+    (tmp_path / "test_specs.json").write_text(json.dumps([_test_spec()]), encoding="utf-8")
+    (tmp_path / "traces").mkdir()
+    (tmp_path / "traces" / "RT-001_run1.json").write_text(json.dumps(_trace()), encoding="utf-8")
+    (tmp_path / "traces" / "broken.json").write_text("{nope", encoding="utf-8")
+    build(_ctx(tmp_path))
+    g = json.loads((tmp_path / "evidence_graph.json").read_text(encoding="utf-8"))
+    assert g["stats"]["trace_nodes"] == 1 and g["stats"]["test_spec_nodes"] == 1
+
+
+def _report(tmp_path, **extra):
+    build(_ctx(tmp_path, **extra))
+    return (tmp_path / "report.md").read_text(encoding="utf-8")
+
+
+def test_report_has_coverage_by_entry_type(tmp_path):
+    store = ModelStore("demo")
+    store.add(_entry("cap_001"))
+    store.add(_entry("cap_002", name="search_hotels"))
+    ctx = {"store": store, "folder": tmp_path, "name": "demo", "test_specs": [_test_spec(target_id="cap_001")]}
+    build(ctx)
+    text = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "## Coverage" in text
+    assert "| capability | 2 | 1 | 50% |" in text
+
+
+def test_report_coverage_with_no_tests_is_zero_not_a_crash(tmp_path):
+    assert "| capability | 1 | 0 | 0% |" in _report(tmp_path)
+
+
+def test_report_shows_severity_reproducibility_and_model_changes(tmp_path):
+    f = {**_finding(severity="critical"), "reproducibility": {"runs": 3, "failures": 3},
+         "status_change": {"from": "unverified", "to": "contradicted"},
+         "confidence_change": {"from": 0.7, "to": 0.35}}
+    text = _report(tmp_path, findings=[f, _finding("F-002", test_id="RT-002", trace_id="TR-002",
+                                                   result="pass", severity="minor")])
+    assert "| critical | 1 | 0 |" in text and "| minor | 0 | 1 |" in text
+    assert "Reproducibility: 3 of 3 runs failed" in text
+    assert "## Model Changes" in text
+    assert "| cap_001 | search_flights | `unverified` → `contradicted` | 0.70 → 0.35 | F-001 |" in text
+
+
+def test_report_without_findings_says_how_to_get_them(tmp_path):
+    text = _report(tmp_path)
+    assert "No findings yet" in text and "run_config" in text
+
+
+def _judge(verdict="fail", score=1):
+    return {"trace_id": "TR-9", "agent": "demo",
+            "overall_quality": {"score": score, "verdict": verdict, "reasoning": "Booked without asking."},
+            "rule_scores": [{"rule_id": "U3", "verdict": "pass"}]}
+
+
+def _checks(verdict="pass"):
+    return [{"rule_id": "U1", "verdict": "pass"}, {"rule_id": "R1", "verdict": verdict}]
+
+
+def test_report_flags_a_judge_fail_that_no_rule_check_caught(tmp_path):
+    (tmp_path / "judge_results.json").write_text(json.dumps(_judge()), encoding="utf-8")
+    (tmp_path / "check_results.json").write_text(json.dumps(_checks()), encoding="utf-8")
+    text = _report(tmp_path)
+    assert "## LLM Judge" in text and "1/5 (fail)" in text
+    assert "**Flag:**" in text
+
+
+def test_report_has_no_flag_when_a_rule_check_also_failed(tmp_path):
+    (tmp_path / "judge_results.json").write_text(json.dumps(_judge()), encoding="utf-8")
+    (tmp_path / "check_results.json").write_text(json.dumps(_checks("fail")), encoding="utf-8")
+    text = _report(tmp_path)
+    assert "Rule checks failed: R1" in text and "**Flag:**" not in text
+
+
+def test_report_has_no_flag_when_the_judge_passes(tmp_path):
+    (tmp_path / "judge_results.json").write_text(json.dumps(_judge("pass", 5)), encoding="utf-8")
+    (tmp_path / "check_results.json").write_text(json.dumps(_checks()), encoding="utf-8")
+    assert "**Flag:**" not in _report(tmp_path)
+
+
+def test_report_ignores_missing_or_corrupt_judge_files(tmp_path):
+    assert "## LLM Judge" not in _report(tmp_path)
+    (tmp_path / "judge_results.json").write_text("{bad", encoding="utf-8")
+    (tmp_path / "check_results.json").write_text("[1, 2", encoding="utf-8")
+    assert "## LLM Judge" not in _report(tmp_path)
+
+
+def test_report_keeps_full_descriptions_and_has_evidence_chains(tmp_path):
+    long = "The agent crashed: " + "x" * 250
+    text = _report(tmp_path, findings=[{**_finding(), "description": long}],
+                   test_specs=[_test_spec()], traces=[_trace()])
+    assert long in text
+    assert "## Evidence Chains" in text
+    assert "| F-001 | fail | TR-001 (" in text and "| RT-001 (" in text
+
+
+def test_report_without_findings_has_no_evidence_chains(tmp_path):
+    assert "## Evidence Chains" not in _report(tmp_path)
+
+
+def test_report_lists_the_judge_score_of_every_run(tmp_path):
+    rows = [
+        {"trace_id": "TR-1", "test_id": "GT-1", "run_status": "completed", "checks_failed": [],
+         "agreement": "judge_only", "overall_quality": {"score": 1, "verdict": "fail", "reasoning": "Stuck | looping.\nAgain."}},
+        {"trace_id": "TR-2", "test_id": "GT-2", "run_status": "crashed", "agreement": "not_judged",
+         "note": "The run crashed, nothing to judge."},
+    ]
+    summary = {"traces": 2, "judged": 1, "mean_overall_score": 1.0, "agreement_rate": 0.0,
+               "agreement": {"judge_only": 1}}
+    (tmp_path / "judge_all.json").write_text(json.dumps({"summary": summary, "traces": rows}), encoding="utf-8")
+    text = _report(tmp_path)
+    assert "## Judge Scores by Run" in text and "1 of 2 runs judged" in text
+    assert "| TR-1 | GT-1 | completed | 1/5 (fail) | none | judge_only | Stuck / looping. Again. |" in text
+    assert "| TR-2 | GT-2 | crashed | — | none | not_judged | The run crashed, nothing to judge. |" in text
+
+
+def test_report_ignores_a_broken_judge_all_file(tmp_path):
+    (tmp_path / "judge_all.json").write_text("{bad", encoding="utf-8")
+    assert "## Judge Scores by Run" not in _report(tmp_path)

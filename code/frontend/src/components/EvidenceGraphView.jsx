@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { escapeHtml, mdToHtml, reportSection } from '../utils/mdToHtml';
 
 export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
   const [activeTab, setActiveTab] = useState('visual'); // 'visual' | 'chains' | 'report' | 'json'
@@ -282,6 +283,11 @@ export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
               color: #9CA3AF;
               text-align: center;
             }
+            h3, h4 { margin: 14px 0 6px; color: #111827; }
+            ul { margin: 4px 0 8px 18px; padding: 0; }
+            code { font-family: monospace; font-size: 9pt; background: #F3F4F6; padding: 1px 4px; border-radius: 3px; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
             @media print {
               .no-print { display: none !important; }
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -354,7 +360,7 @@ export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
                   <td><code>${e.id}</code></td>
                   <td><span class="badge badge-cap">${e.entry_type}</span></td>
                   <td><strong>${e.name}</strong></td>
-                  <td><span class="badge ${e.status === 'confirmed' ? 'badge-verified' : 'badge-rule'}">${e.status}</span></td>
+                  <td><span class="badge ${e.status === 'confirmed' ? 'badge-verified' : (e.status === 'contradicted' || e.status === 'unreachable') ? 'badge-fail' : 'badge-rule'}">${escapeHtml(e.status)}</span></td>
                   <td>${(e.confidence * 100).toFixed(0)}%</td>
                   <td>${e.detected_by || 'rule'}</td>
                 </tr>
@@ -363,10 +369,10 @@ export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
           </table>
 
           <h2>3. Reconciliation Findings</h2>
-          ${findings.length === 0 ? '<p><em>No failure findings recorded. All active claims unverified or confirmed.</em></p>' : `
+          ${findings.length === 0 ? '<p><em>No findings recorded for this agent yet.</em></p>' : `
             <table>
               <thead>
-                <tr><th>Finding ID</th><th>Target</th><th>Result</th><th>Severity</th><th>Description</th></tr>
+                <tr><th>Finding ID</th><th>Target</th><th>Result</th><th>Severity</th><th>Runs failed</th><th>Model change</th><th>Description</th></tr>
               </thead>
               <tbody>
                 ${findings.map(f => `
@@ -375,12 +381,25 @@ export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
                     <td><code>${f.target_id || '-'}</code></td>
                     <td><span class="badge ${f.result === 'fail' ? 'badge-fail' : 'badge-verified'}">${f.result}</span></td>
                     <td><strong>${f.severity}</strong></td>
-                    <td>${f.description || '-'}</td>
+                    <td>${f.reproducibility ? `${f.reproducibility.failures}/${f.reproducibility.runs}` : '-'}</td>
+                    <td>${f.status_change ? `${escapeHtml(f.status_change.from)} → ${escapeHtml(f.status_change.to)}${f.confidence_change ? ` (${Number(f.confidence_change.from).toFixed(2)} → ${Number(f.confidence_change.to).toFixed(2)})` : ''}` : '-'}</td>
+                    <td>${escapeHtml(f.description || '-')}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
           `}
+
+          ${[
+            ['4. Coverage of the Behavioural Model', 'Coverage'],
+            ['5. Model Changes After Testing', 'Model Changes'],
+            ['6. Evidence Chains (finding to trace to test to model entry to code)', 'Evidence Chains'],
+            ['7. LLM Judge Assessment', 'LLM Judge'],
+            ['8. LLM Judge Score for Every Run', 'Judge Scores by Run'],
+          ].map(([title, heading]) => {
+            const body = reportSection(reportContent, heading);
+            return body ? `<h2>${title}</h2>${mdToHtml(body)}` : '';
+          }).join('')}
 
           <div class="footer-note">
             GreatTest Evidence Traceability Report &bull; Verified against JSON Schema Draft 2020-12

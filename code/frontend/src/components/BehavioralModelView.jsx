@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { LiveModelChanges, StatusBadge } from './LiveModelChanges';
 
-export function BehavioralModelView({ modelData, onSelectEntry }) {
+export function BehavioralModelView({ modelData, onSelectEntry, currentAgent }) {
   const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'capability' | 'workflow'
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -42,7 +43,7 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
           letterSpacing: '0.8px',
           marginBottom: '6px'
         }}>
-          <span>✦</span> Behavioral Model V0
+          <span>✦</span> Behavioral Model {(modelData.version || 'v0').toUpperCase()}
         </div>
         <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.6px' }}>
           Extracted Capabilities & Workflow Constraints
@@ -51,6 +52,9 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
           Synthesized claims from rule-based AST scanner + LLM inference cross-checking, with evidence anchored in repository code.
         </p>
       </div>
+
+      {/* Entries that tests have moved, newest first */}
+      <LiveModelChanges agentName={currentAgent} />
 
       {/* Metrics Row */}
       <div style={{
@@ -194,6 +198,7 @@ export function BehavioralModelView({ modelData, onSelectEntry }) {
                     }}>
                       {entry.type}
                     </span>
+                    <StatusBadge status={entry.status} />
                   </div>
 
                   <span style={{

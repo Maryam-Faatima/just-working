@@ -193,6 +193,21 @@ def test_rubric_from_the_fixture_links_items_to_constraint_entries():
     assert rubric["failure_definition"].startswith("The agent changes a booking")
 
 
+def test_rubric_writes_check_type_only_where_the_rule_is_clear():
+    spec = normalize_spec(spec_with(rules=[
+        {"text": "Must get the user's approval before charging a card", "kind": "must_always",
+         "severity": "critical", "applies_to": ["charge_card"]},
+        {"text": "Must call lookup before refund", "kind": "ordering",
+         "severity": "major", "applies_to": ["lookup", "refund"]},
+        {"text": "Never reveal other users' data", "kind": "must_never", "severity": "critical"},
+        {"text": "Must get approval before acting", "kind": "must_always", "severity": "major"},
+    ]))
+    items = {i["rule_id"]: i for i in build_rubric(spec)["items"]}
+    assert items["R1"]["check_type"] == "confirm_before"
+    assert items["R2"]["check_type"] == "call_order"
+    assert "check_type" not in items["R3"] and "check_type" not in items["R4"]
+
+
 @pytest.mark.parametrize("policy, word", [("ask", "must ask"), ("assume", "must say what it assumed"),
                                           ("refuse", "must decline")])
 def test_ambiguity_policy_selects_the_default_item(policy, word):

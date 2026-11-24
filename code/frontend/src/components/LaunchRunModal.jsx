@@ -21,6 +21,7 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
   const [qFailureDef, setQFailureDef] = useState('');
   const [qRule1, setQRule1] = useState('');
   const [qRule1Severity, setQRule1Severity] = useState('critical');
+  const [entryPoint, setEntryPoint] = useState('');
 
   // Infer agent name from source and check if spec already exists
   useEffect(() => {
@@ -45,6 +46,7 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
           setQOutOfScope((res.spec.out_of_scope || []).join(', '));
           setQAmbiguity(res.spec.ambiguity_policy || 'ask');
           setQFailureDef(res.spec.failure_definition || '');
+          setEntryPoint((res.spec.run_config && res.spec.run_config.entry_point) || '');
           if (res.spec.rules && res.spec.rules.length > 0) {
             setQRule1(res.spec.rules[0].text || '');
             setQRule1Severity(res.spec.rules[0].severity || 'critical');
@@ -119,7 +121,9 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
         rules: rulesList,
         run_config: {
           interface: 'python_module',
-          repeats: 3
+          repeats: 3,
+          // Left empty, GreatTest finds the graph in langgraph.json on its own.
+          ...(entryPoint.trim() ? { entry_point: entryPoint.trim() } : {})
         }
       };
     }
@@ -450,6 +454,19 @@ export function LaunchRunModal({ isOpen, onClose, onStartRun }) {
                     value={qRule1}
                     onChange={(e) => setQRule1(e.target.value)}
                     placeholder="e.g. Must confirm before cancelling bookings"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12.5px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
+                    How to run the agent (optional entry point):
+                  </label>
+                  <input
+                    type="text"
+                    value={entryPoint}
+                    onChange={(e) => setEntryPoint(e.target.value)}
+                    placeholder="Leave empty for LangGraph repos (read from langgraph.json), or file.py:function"
                     style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontSize: '12.5px' }}
                   />
                 </div>

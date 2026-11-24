@@ -35,7 +35,9 @@
       "type": "object",
       "properties": {
         "entry_point": { "type": "string", "minLength": 1 },
-        "interface": { "enum": ["python_module", "http"] },
+        "interface": { "enum": ["python_module", "http", "langgraph"] },
+        "timeout_seconds": { "type": "number", "minimum": 1, "maximum": 3600 },
+        "python": { "type": "string", "minLength": 1 },
         "repeats": { "type": "integer", "minimum": 1, "maximum": 20 }
       },
       "additionalProperties": false

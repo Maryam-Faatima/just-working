@@ -184,7 +184,11 @@ def test_a_crashed_run_fails_u1_and_leaves_other_rules_weak():
     (item("R1", "ordering", ["a", "b"]), "call_order"),
     (item("R2", "ordering", ["a"]), None),
     (item("R3", "must_never", ["a"]), None),
-    (item("R4", "must_always", ["a"], description="Must confirm first"), None),
+    (item("R4", "must_always", ["a"], description="Must confirm first"), "confirm_before"),
+    (item("R4", "must_never", ["a"], description="Never act without the user's approval"), "confirm_before"),
+    (item("R4", "must_always", description="Must confirm before acting"), None),
+    (item("R4", "must_always", ["a"], description="Must confirm the user's identity"), None),
+    (item("R4", "must_always", ["a"], description="Must be polite before acting"), None),
     (item("R5", "must_always", check="judge"), None),
     (item("R6", "must_always", ["a"], check_type="never_call"), "never_call"),
 ])

@@ -1,0 +1,24 @@
+{
+  "agent": "customer-service-agent",
+  "source": "https://github.com/Bessiedelight/customer-service-agent (commit 3769937)",
+  "labelled_by": "Maryam Fatima, from the source code, 21 Nov 2026",
+  "tools": ["lookup_order", "check_refund_eligibility", "process_refund"],
+  "workflow_steps": [
+    "supervisor", "order_agent", "refund_agent", "complaints_agent", "summarize_node",
+    "order_extract_node", "order_gate_node", "correction_node", "order_agent_node", "order_tools",
+    "refund_extract_node", "refund_gate_node", "refund_agent_node", "refund_review_node", "refund_tools",
+    "complaints_extract_node", "complaints_gate_node", "complaints_respond_node"
+  ],
+  "constraints": [
+    {"text": "Escalate to a senior agent after the maximum number of correction retries", "file": "shopbot_enterprise/agents.py", "lines": "43-60"},
+    {"text": "Order agent does nothing once the request is escalated", "file": "shopbot_enterprise/agents.py", "lines": "141-143"},
+    {"text": "Refund agent does nothing once the request is escalated", "file": "shopbot_enterprise/agents.py", "lines": "280-282"},
+    {"text": "A human must approve a refund before the refund tool runs", "file": "shopbot_enterprise/agents.py", "lines": "246-275"},
+    {"text": "Frustrated or angry complaints need human review", "file": "shopbot_enterprise/agents.py", "lines": "369-395"},
+    {"text": "Complaints go to the response node when retries run out", "file": "shopbot_enterprise/agents.py", "lines": "412-417"},
+    {"text": "Finished conversations of more than six messages are summarized", "file": "shopbot_enterprise/shopbot.py", "lines": "64-71"},
+    {"text": "An order id must be valid before the order is looked up", "file": "shopbot_enterprise/gates.py", "lines": "31-50"},
+    {"text": "A refund request must pass validation (reason length and similar)", "file": "shopbot_enterprise/gates.py", "lines": "53-80"},
+    {"text": "A complaint must pass validation", "file": "shopbot_enterprise/gates.py", "lines": "83-102"}
+  ]
+}

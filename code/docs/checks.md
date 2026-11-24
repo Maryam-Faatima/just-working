@@ -42,8 +42,10 @@ ever exercised is reconciliation's question (unreachable), not a failure.
 
 ## Choosing the check
 1. An explicit `check_type` on the rubric item wins.
-2. Otherwise it is inferred only where clear: U1 is no_crash_or_empty, and an ordering rule with
-   two or more tools is call_order.
+2. Otherwise it is inferred only where clear (understand/rule_checks.py, decision 70): U1 is
+   no_crash_or_empty, an ordering rule with two or more tools is call_order, and a rule that
+   names guarded tools in applies_to and asks for confirmation or approval before them
+   (must_always or must_never) is confirm_before. Nothing in the inference names a tool.
 3. Every other rule, including every item with check = judge, is read by the LLM (below).
    Rules about what the agent says or reveals, or that name no tool, land here.
 
@@ -83,8 +85,10 @@ fail, 2 bad input.
   becomes weak so a person can look. Wording can be added per rule with `phrases`.
 - Any user reply after the question counts, including "no". A call after a refusal is not caught
   statically, only by the LLM read.
-- Phase 0 does not yet write check_type or phrases. Until it does, add them while reviewing the
-  rubric (GET/PUT rubric endpoint).
+- Phase 0 writes check_type where it is clear (decision 70) but never `phrases`. Add wording in
+  other languages or unusual phrasing while reviewing the rubric (GET/PUT rubric endpoint).
+- confirm_before trusts applies_to. If it names a step that is not a tool call, the guarded tools
+  are never seen and the rule passes as "not exercised". Use real tool names from the code.
 - A weak result cannot contradict a claim, but reconciliation can still confirm a claim when its
   rules are only weak.
 

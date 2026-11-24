@@ -146,7 +146,59 @@ export async function fetchAgentReport(agentName) {
   return await res.json();
 }
 
+export async function fetchAgentTestSpecs(agentName) {
+  const res = await fetch(`${API_BASE}/test-specs/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return [];
+  return await res.json();
+}
 
+export async function fetchAgentTestRun(agentName) {
+  const res = await fetch(`${API_BASE}/test-run/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentTraces(agentName) {
+  const res = await fetch(`${API_BASE}/traces/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return [];
+  return await res.json();
+}
+
+export async function fetchAgentTrace(agentName, filename) {
+  let res = await fetch(`${API_BASE}/traces/${encodeURIComponent(agentName)}/${encodeURIComponent(filename)}`);
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/trace/${encodeURIComponent(agentName)}/${encodeURIComponent(filename)}`);
+  }
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchAgentJudgeResults(agentName) {
+  const res = await fetch(`${API_BASE}/judge/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function runJudgeEvaluation(agentName, { trace = null, traceFile = null, useLlm = true } = {}) {
+  const res = await fetch(`${API_BASE}/judge/${encodeURIComponent(agentName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      trace,
+      trace_file: traceFile,
+      use_llm: useLlm
+    })
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const errJson = await res.json();
+      if (errJson.detail) detail = errJson.detail;
+    } catch {}
+    throw new Error(`Evaluation failed: ${detail}`);
+  }
+  return await res.json();
+}
 
 // ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
 
@@ -156,14 +208,14 @@ export async function fetchAgentTests(agentName) {
   return await res.json();
 }
 
-export async function fetchAgentTestRun(agentName) {
-  const res = await fetch(`${API_BASE}/test-run/${agentName}`);
-  if (!res.ok) return null;
+export async function fetchModelChanges(agentName) {
+  const res = await fetch(`${API_BASE}/model-changes/${encodeURIComponent(agentName)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 }
 
-export async function fetchAgentTrace(agentName, traceFile) {
-  const res = await fetch(`${API_BASE}/traces/${agentName}/${encodeURIComponent(traceFile)}`);
+export async function fetchAgentRepro(agentName) {
+  const res = await fetch(`${API_BASE}/repro/${agentName}`);
   if (!res.ok) return null;
   return await res.json();
 }

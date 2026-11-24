@@ -48,23 +48,63 @@ def _turn_result(data: Any) -> TurnResult:
     return TurnResult(reply="" if data is None else str(data))
 
 
+def read_env_file(path: Path) -> dict[str, str]:
+    """KEY=value lines of an agent's own .env file. Missing or unreadable means no variables."""
+    values: dict[str, str] = {}
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return values
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.removeprefix("export ").strip()
+        value = value.strip().strip("\"'")
+        if key and value:
+            values[key] = value
+    return values
+
+
 class PythonModuleBackend:
-    """Calls a Python function in the agent's folder, one child process per turn."""
+    """Calls a Python function or a LangGraph graph in the agent's folder, one child process per turn.
+
+    A graph needs the whole conversation, the agent's own earlier replies included, so this
+    backend remembers each reply it returns and sends it back with the next turn. One backend
+    serves one conversation (the runner makes a new one for every run).
+    """
 
     def __init__(self, agent_dir: Path, entry_point: str, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-                 python: str = sys.executable):
+                 python: str = sys.executable, kind: str = "auto"):
         self.agent_dir = Path(agent_dir)
         self.entry_point = entry_point
         self.timeout_seconds = timeout_seconds
         self.python = python
+        self.kind = kind
+        self.replies: list[str] = []
+
+    def history(self, user_messages: list[str]) -> list[dict[str, str]]:
+        """The conversation so far as chat messages: each user message followed by the reply to it."""
+        out: list[dict[str, str]] = []
+        for i, text in enumerate(user_messages):
+            out.append({"role": "user", "content": text})
+            if i < len(self.replies):
+                out.append({"role": "assistant", "content": self.replies[i]})
+        return out
 
     def run_turn(self, user_messages: list[str]) -> TurnResult:
         with tempfile.TemporaryDirectory(prefix="greattest-turn-") as tmp:
             in_path, out_path = Path(tmp) / "request.json", Path(tmp) / "result.json"
-            in_path.write_text(json.dumps({"messages": list(user_messages)}), encoding="utf-8")
-            env = {**os.environ, "PYTHONPATH": str(self.agent_dir)}
+            request = {"messages": list(user_messages), "history": self.history(user_messages), "kind": self.kind}
+            in_path.write_text(json.dumps(request), encoding="utf-8")
+            # The agent's own .env supplies its keys; anything already in the environment wins.
+            env = {**read_env_file(self.agent_dir / ".env"), **os.environ, "PYTHONPATH": str(self.agent_dir)}
             command = [self.python, str(PYTHON_BRIDGE), self.entry_point, str(in_path), str(out_path)]
-            return _turn_result(run_subprocess(command, self.agent_dir, env, self.timeout_seconds, out_path))
+            result = _turn_result(run_subprocess(command, self.agent_dir, env, self.timeout_seconds, out_path))
+        del self.replies[len(user_messages) - 1:]  # a repeated turn replaces its old reply
+        self.replies.append(result.reply)
+        return result
 
 
 class HttpBackend:
@@ -97,6 +137,21 @@ class HttpBackend:
             return TurnResult(reply=response.text)
 
 
+def langgraph_entry(root) -> tuple[str, str] | None:
+    """(entry point, graph name) from the repo's langgraph.json, the first graph it lists."""
+    try:
+        config = json.loads((Path(root) / "langgraph.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    graphs = config.get("graphs") if isinstance(config, dict) else None
+    if not isinstance(graphs, dict):
+        return None
+    for name, target in graphs.items():
+        if isinstance(target, str) and ":" in target:
+            return target.removeprefix("./"), str(name)
+    return None
+
+
 def choose_backend(ctx: dict[str, Any]) -> tuple[Callable[[], Backend] | None, str]:
     """(backend factory, how it was chosen), or (None, why the agent cannot be run)."""
     if ctx.get("backend_factory"):
@@ -106,15 +161,27 @@ def choose_backend(ctx: dict[str, Any]) -> tuple[Callable[[], Backend] | None, s
         return TravelAgentBackend, "travel agent"
     run_config = (ctx.get("spec") or {}).get("run_config") or {}
     entry_point = (run_config.get("entry_point") or "").strip()
-    if not entry_point:
-        return None, "no entry point: answer the Phase 0 start-up questions (run_config) to run tests"
     interface = run_config.get("interface", "python_module")
+    timeout = float(run_config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
+    python = run_config.get("python") or sys.executable
+    how = "python module"
+    if not entry_point and interface != "http" and root is not None:
+        found = langgraph_entry(root)  # a LangGraph repo says where its graph is
+        if found:
+            entry_point, graph_name = found
+            interface = "langgraph"
+            how = f"langgraph graph '{graph_name}' from langgraph.json"
+    if not entry_point:
+        return None, "no entry point: add langgraph.json, or answer the Phase 0 start-up questions (run_config)"
     if interface == "http":
         if not entry_point.startswith(("http://", "https://")):
             return None, f"HTTP entry point must be a URL starting with http:// or https://, got {entry_point!r}"
-        return (lambda: HttpBackend(entry_point)), "http"
+        return (lambda: HttpBackend(entry_point, timeout)), "http"
     if ":" not in entry_point:
         return None, f"Python entry point must look like file.py:function or module:function, got {entry_point!r}"
     if root is None:
         return None, "no agent folder to run the Python entry point in"
-    return (lambda: PythonModuleBackend(Path(root), entry_point)), "python module"
+    kind = "langgraph" if interface == "langgraph" else "auto"
+    if interface == "langgraph" and how == "python module":
+        how = "langgraph graph"
+    return (lambda: PythonModuleBackend(Path(root), entry_point, timeout, python, kind)), how

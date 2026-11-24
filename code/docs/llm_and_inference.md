@@ -10,6 +10,7 @@ change, and later phases (judge, test generator) reuse the same wrapper.
 
 ## llm.py
 - Providers are tried in order: Gemini, then Groq (decision 3). The first that answers wins.
+- A dropped connection, reset or timeout is retried once, then reported as an LLMError so the next provider is tried (or the check scores weak) instead of crashing the stage.
 - Keys come from environment variables GEMINI_API_KEY and GROQ_API_KEY. For local work they
   are read from a .env file in the project root (copy .env.example). Variables that are
   already set are not overridden, so CI and real environments win over the file.
@@ -18,7 +19,7 @@ change, and later phases (judge, test generator) reuse the same wrapper.
   llama-3.3-70b-versatile both stopped working in 2026), so a 404 usually means a retired
   model name. HTTP errors include the provider's response text to make this visible.
 - Every reply is cached in .llm_cache/, keyed by a hash of the system prompt and prompt.
-  The same prompt never costs a second call, and the demo can run offline from the cache.
+  The same prompt never costs a second call on that machine. The cache is local and not committed (decision 67).
   A reply that is not valid JSON is removed from the cache so it can be retried.
 - Temperature is 0 for repeatable results.
 - Functions: complete (raw text), complete_json (parsed JSON), load_env.

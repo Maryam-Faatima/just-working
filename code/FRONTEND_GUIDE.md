@@ -95,3 +95,7 @@ Open your browser at: **`http://localhost:5173`**
      - **Phase 5/5: Behavioral Model V0**: Extracted capabilities, state transitions, and constraints.
 4. **Real-Time Progress Indicator**:
    - Live stage-by-stage status floating popup displayed at the bottom while pipeline execution is in progress.
+
+5. **Live Model Changes**:
+   - While a run is in progress, a panel at the bottom right lists the model entries that test results have moved (for example `con_003` unverified to contradicted, 60% to 30%), newest first, with the count of tests reconciled so far. It polls `/api/model-changes/{name}` every 1.5 seconds.
+   - The same list stays on the Behavioral Model screen after the run.

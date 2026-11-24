@@ -16,11 +16,14 @@ reconcile(store, spec, runs, finding_id=None)
 ## Rules
 | Situation | Outcome | Model changes |
 |---|---|---|
-| Any check failed on a completed run | contradicted | Confidence moves down by the bounded rule, one step per failing run |
+| Any check that may move the entry failed on a completed run | contradicted | Confidence moves down by the bounded rule, one step per failing run |
+| Only a check marked moves_entry False failed (a judge-scored default rule) | as the rows below | The finding fails, the failure is reported, the entry is not contradicted (decision 68) |
 | No failures, the claim's tool was called | confirmed | Confidence moves up, one step per passing run |
-| No failures, tool never called, 3 or more completed runs | unreachable | Confidence moves down |
-| No failures, tool never called, fewer than 3 runs | none (inconclusive) | None |
+| No failed check at all, tool never called, 3 or more completed runs | unreachable | Confidence moves down |
+| Tool never called, fewer than 3 runs or any failed check | none (inconclusive) | None |
 | Run crashed or timed out | none | None. A critical finding is still written |
+| Entry already contradicted, a later test passes or finds the tool unreachable | none (status kept) | Passing runs added as evidence, confidence unchanged, the finding says the entry stays contradicted (decision 64) |
+| Entry already confirmed, a later test never reaches the tool | none (status kept) | Confidence unchanged, the finding says the entry stays confirmed (decision 70). A later failure still contradicts it |
 | Agent called a tool the model lacks | discovered entry added | New entry, status discovered, runtime evidence |
 
 With several runs, a failure always wins. If any run failed, only the failing runs move

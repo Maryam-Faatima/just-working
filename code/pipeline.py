@@ -1,7 +1,7 @@
 """One command for the whole pipeline.
 
     python -m pipeline <git URL | .zip file | folder> [--spec FILE] [--ask | --no-ask]
-                       [--name N] [--out DIR] [--repos DIR] [--no-llm] [--open]
+                       [--name N] [--out DIR] [--repos DIR] [--no-llm] [--cached-v0] [--no-sim-cache] [--open]
 
 Everything is worked out from the source:
   - the agent name comes from the URL or folder (--name overrides it)
@@ -21,7 +21,8 @@ Stages run in order and share one context dict:
   callgraph  build the call graph and the component interactions, write callgraph.json / .md
   model      build the rule-based Behavioral Model V0 (model_v0_rule.json), add the developer's rules
              from the spec, write rubric.json (and spec.json) and model_v0.json
-  infer      ask the LLM to cross-check V0 and add constraints (overwrites model_v0.json)
+  infer      ask the LLM to cross-check V0 and add constraints (overwrites model_v0.json). With --cached-v0,
+             or when the LLM is unavailable, the saved snapshot in fixtures/cached_v0 is used instead
   test       OPTIONAL hook: testing.runner.run(ctx), the testing lane plugs in here
   report     OPTIONAL hook: evidence.report.build(ctx), the evidence lane plugs in here
 
@@ -43,7 +44,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from understand import callgraph, context_files, infer, llm, phase0
+from understand import cached_v0, callgraph, context_files, infer, llm, phase0
 from understand.acquire import (
     DEFAULT_CLONE_DIR,
     AcquireError,
@@ -82,6 +83,8 @@ def stage_scan(ctx):
     scan["scanned_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     ctx["scan"] = scan
     ctx["folder"] = write_scan_outputs(scan, ctx["name"], ctx["out"])
+    for stale in ("model_changes.json", "model_v1.json"):  # a new run starts with no flips
+        Path(ctx["folder"], stale).unlink(missing_ok=True)
     detail = (f"{scan['files_scanned']} files, {len(scan['tools'])} tools, "
               f"{len(scan['nodes'])} nodes, {len(scan['edges'])} edges, "
               f"{len(scan['context_files'])} doc/config files")
@@ -122,13 +125,34 @@ def stage_model(ctx):
     return status, f"{detail}; rubric has {len(rubric['items'])} items"
 
 
+def _use_snapshot(ctx, why):
+    """Merge the cached V0 of this agent into the model. Returns (status, detail), or None if there is none."""
+    try:
+        snapshot = cached_v0.load_snapshot(ctx["name"], ctx.get("cached_dir"))
+    except cached_v0.SnapshotError as exc:
+        return "warning", f"{why}; {exc}, kept the rule-based model"
+    if snapshot is None:
+        return None
+    report = cached_v0.apply_snapshot(ctx["store"], snapshot)
+    ctx["store"].save(ctx["folder"] / "model_v0.json")
+    detail = (f"{why}; used the cached V0: {report['upgraded']} entries agreed, "
+              f"{report['constraints_added']} constraints added")
+    note = cached_v0.stale_note(snapshot, ctx["scan"].get("commit"))
+    return ("warning", f"{detail} ({note})") if note else ("ok", detail)
+
+
 def stage_infer(ctx):
+    if ctx.get("cached_v0"):
+        result = _use_snapshot(ctx, "--cached-v0")
+        return result or ("warning", f"--cached-v0: no snapshot for {ctx['name']} in "
+                                     f"{cached_v0.DEFAULT_CACHE_DIR}, kept the rule-based model")
     if not ctx["use_llm"]:
         return "skipped", "--no-llm: model_v0.json holds the rule-based model"
     try:
         report = infer.infer_v0(ctx["scan"], ctx["repo_root"], ctx["store"], ctx.get("callgraph"))
     except llm.LLMError as exc:
-        return "warning", f"LLM unavailable, kept the rule-based model ({exc})"
+        result = _use_snapshot(ctx, f"LLM unavailable ({exc})")
+        return result or ("warning", f"LLM unavailable, kept the rule-based model ({exc})")
     ctx["store"].save(ctx["folder"] / "model_v0.json")
     detail = (f"agreed on {report['capabilities_agreed']} capabilities, "
               f"added {report['constraints_added']} constraints, "
@@ -161,12 +185,18 @@ STAGES = [
     ("model", stage_model),
     ("infer", stage_infer),
     ("test", optional_stage("testing.runner", "run")),
+<<<<<<< Updated upstream
     ("check", optional_stage("testing.campaign", "run")), 
+=======
+    ("check", optional_stage("testing.campaign", "run")),
+    ("judge", optional_stage("testing.judge_all", "run")),
+>>>>>>> Stashed changes
     ("report", optional_stage("evidence.report", "build")),
 ]
 
 
-def run_pipeline(source, name=None, out=None, use_llm=True, log=print, spec_path=None, repos=None):
+def run_pipeline(source, name=None, out=None, use_llm=True, log=print, spec_path=None, repos=None,
+                 simulator_cache=True, cached=False, cached_dir=None):
     """Run every stage on `source`. Returns the summary dict (also written to disk).
 
     Raises AcquireError if the source cannot be opened and SpecError if the spec cannot be
@@ -175,7 +205,8 @@ def run_pipeline(source, name=None, out=None, use_llm=True, log=print, spec_path
     """
     name = safe_name(name) if name else agent_name(source)
     spec = phase0.load_spec(spec_path) if spec_path else None
-    ctx = {"source": str(source), "name": name, "out": out, "use_llm": use_llm, "spec": spec}
+    ctx = {"source": str(source), "name": name, "out": out, "use_llm": use_llm, "spec": spec,
+           "simulator_cache": simulator_cache, "cached_v0": cached, "cached_dir": cached_dir}
     clone_dir = Path(repos or DEFAULT_CLONE_DIR)
     if is_git_url(source):
         target = clone_dir / name
@@ -230,6 +261,10 @@ def main(argv=None):
     parser.add_argument("--out", help="base output folder (default: outputs/)")
     parser.add_argument("--repos", help="base folder for cloned git URLs (default: repos/)")
     parser.add_argument("--no-llm", action="store_true", help="skip the LLM step (rule-based model only)")
+    parser.add_argument("--cached-v0", action="store_true",
+                        help="use the saved V0 snapshot (fixtures/cached_v0) instead of the LLM, for offline runs")
+    parser.add_argument("--no-sim-cache", action="store_true",
+                        help="fresh simulated-user replies instead of the cached ones (slower, not repeatable)")
     parser.add_argument("--open", action="store_true", help="open the scan report in the browser")
     args = parser.parse_args(argv)
 
@@ -240,7 +275,8 @@ def main(argv=None):
         if spec_path is None and not args.no_ask and (args.ask or _interactive()):
             spec_path = phase0.ensure_spec(Path(args.out or DEFAULT_OUTPUT_DIR) / name, force=args.ask)
         summary = run_pipeline(args.source, name, args.out, use_llm=not args.no_llm,
-                               spec_path=spec_path, repos=args.repos)
+                               spec_path=spec_path, repos=args.repos,
+                               simulator_cache=not args.no_sim_cache, cached=args.cached_v0)
     except (EOFError, KeyboardInterrupt):
         print("\ncancelled, nothing was run", file=sys.stderr)
         return 1

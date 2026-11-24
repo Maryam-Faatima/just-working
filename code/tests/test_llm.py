@@ -1,3 +1,4 @@
+import http.client
 import io
 import urllib.error
 
@@ -52,3 +53,40 @@ def test_http_error_keeps_the_provider_message(monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)
     with pytest.raises(llm.LLMError, match=r"HTTP 404.*model not found"):
         llm._post("https://example.test", {}, {})
+
+def test_dropped_connection_is_retried_once_then_reported_as_llm_error(monkeypatch):
+    monkeypatch.setattr(llm, "RETRY_PAUSE", 0)
+    calls = []
+
+    def drop(req, timeout):
+        calls.append(1)
+        raise http.client.RemoteDisconnected("Remote end closed connection without response")
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", drop)
+    with pytest.raises(llm.LLMError, match="RemoteDisconnected"):
+        llm._post("https://example.test", {}, {})
+    assert len(calls) == 2
+
+
+def test_a_dropped_connection_that_recovers_returns_the_reply(monkeypatch):
+    monkeypatch.setattr(llm, "RETRY_PAUSE", 0)
+    state = {"n": 0}
+
+    class Reply:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def flaky(req, timeout):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise ConnectionResetError("reset")
+        return Reply()
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", flaky)
+    assert llm._post("https://example.test", {}, {}) == {"ok": True}

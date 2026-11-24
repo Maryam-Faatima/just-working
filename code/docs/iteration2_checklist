@@ -15,7 +15,7 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 
 ## B. Contracts and fixtures (9 Nov)
 - [EH done] SH-1 Contract Fixtures: test_spec.json (EH), check_results.json (MF), judge_results.json (AY), real trace.json (EH) committed
-- [ ] AY-2 Judge Contract Extension: agree the shared check result fields (score 1 to 5, verdict, method, reasoning, already in testing/checks.py) and the rubric fields check_type and phrases; one change-control PR approved by all three (AY, MF)
+- [X] AY-2 Judge Contract Extension: agree the shared check result fields (score 1 to 5, verdict, method, reasoning, already in testing/checks.py) and the rubric fields check_type and phrases; one change-control PR approved by all three (AY, MF)
 - [ ] Decision 53 in decisions.md: optional check_type and phrases on rubric items, undecided rule scores 3 (weak), never skipped and never a failure, rules without a program check are read by the LLM (MF)
 - [ ] New decisions logged with date and reason as they are made
 
@@ -23,8 +23,8 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] MF-1 Trace Check Engine: any agent, static checks plus LLM read of any other rule: testing/checks.py, tests/test_checks.py, docs/checks.md (9 Nov, late)
 - [ ] MF-1 ruff and pytest green, PR reviewed by EH
 - [ ] MF-2 Checks CLI: python -m testing.checks trace.json rubric.json (10 Nov)
-- [ ] MF-8 Cached V0 Fallback saved and used by the offline demo (12 Nov)
-- [ ] MF-3 Multi-Run Reconciliation over many tests and repeats, constraint entries updated (14 Nov)
+- [X] MF-8 Cached V0 Fallback saved and used by the offline demo (12 Nov)
+- [X] MF-3 Multi-Run Reconciliation over many tests and repeats, constraint entries updated (14 Nov)
 - [ ] MF-4 Live Flip Demo: a generated test moves a constraint to contradicted on the real target agent (17 Nov)
 - [ ] MF-7 Release Pipeline: CD runs only if CI passes, Docker image builds and runs pipeline, tag v0.2-final (19 Nov)
 - [ ] MF-6 Phase 1 Gold-Standard Mini Eval on 3 agents with a real LLM key: resolved-call share, tool recall, rejection rate (24 Nov)
@@ -44,21 +44,21 @@ Task IDs match the GitHub issue titles. Tick a box only when merged to develop w
 - [ ] Unit tests including failure and edge cases for every EH module
 
 ## E. Aliza (AY)
-- [ ] AY-1 LLM Judge: testing/judge.py, 1 to 5 scores with reasoning, below 3 fail, 3 weak, cached, fails safely if LLM is down (14 Nov)
-- [ ] Deterministic checks (testing/checks.py) run before the judge; judge.py scores quality 1 to 5 with reasoning and does not repeat the pass or fail reading of rules that checks.py already did
+- [X] AY-1 LLM Judge: testing/judge.py, 1 to 5 scores with reasoning, below 3 fail, 3 weak, cached, fails safely if LLM is down (14 Nov)
+- [X] Deterministic checks (testing/checks.py) run before the judge; judge.py scores quality 1 to 5 with reasoning and does not repeat the pass or fail reading of rules that checks.py already did
 - [ ] AY-3 Real Findings in Evidence Graph: finding to trace to test to model entry to code (17 Nov)
 - [ ] AY-4 Report on Real Runs: coverage, severity, reproducibility, model changes (18 Nov)
 - [ ] AY-5 UI on Real Runs: SIMULATION label removed, PDF download works on real findings (19 Nov)
-- [ ] AY-6 Conference Poster: portrait 22.5" x 34.5", source file plus JPEG, supervisor approval (20 Nov)
+- [X] AY-6 Conference Poster: portrait 22.5" x 34.5", source file plus JPEG, supervisor approval (20 Nov)
 - [ ] AY-7 Judge Reliability Study: agreement with deterministic checks, self-consistency across runs (25 Nov)
 - [ ] AY-8 FYP-2 Evaluation Plan: baselines, metrics, benchmarks (26 Nov)
 - [ ] AY-9 Requirements and Scope Chapters (27 Nov)
-- [ ] Unit tests with fake LLM for every AY module
+- [X] Unit tests with fake LLM for every AY module (44 tests in tests/test_judge.py passing)
 
 ## F. Poster contents (AY with all)
-- [ ] Title, members, supervisors top-left; goals top-right; plan and deliverables bottom
-- [ ] Evidence-chain figure and one real result chart (from MF-5 or EH-6)
-- [ ] Minimal text, readable from one metre, spell-checked
+- [X] Title, members, supervisors top-left; goals top-right; plan and deliverables bottom
+- [X] Evidence-chain figure and one real result chart (from MF-5 or EH-6)
+- [X] Minimal text, readable from one metre, spell-checked
 
 ## G. Integration (SH-2, 17 to 20 Nov)
 - [ ] One command runs Phases 0 to 3 on the target agent

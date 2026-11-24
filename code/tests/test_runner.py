@@ -238,7 +238,7 @@ def model_ctx(tmp_path, **extra):
 def test_seed_tests_are_generated_when_there_are_none(tmp_path):
     ctx = model_ctx(tmp_path)
     detail = run(ctx)
-    assert detail == "generated 1 seed test(s); not run: no entry point: answer the Phase 0 start-up questions (run_config) to run tests"
+    assert detail == "generated 1 seed test(s); not run: no entry point: add langgraph.json, or answer the Phase 0 start-up questions (run_config)"
     saved = json.loads((tmp_path / "test_specs.json").read_text(encoding="utf-8"))
     assert saved == ctx["test_specs"] and saved[0]["target_id"] == "cap_001"
 

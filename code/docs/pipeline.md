@@ -32,6 +32,8 @@ The source is checked first, so a mistyped path fails before any question is ask
 | --ask | Always ask, even if answers are saved |
 | --no-ask | Never ask. Runs started without a terminal (scripts, CI) never ask either |
 
+Other options: --no-llm skips the LLM steps. --no-sim-cache asks the simulated user for fresh replies instead of the cached ones (slower, not repeatable, decision 69).
+
 Ctrl+C or Ctrl+D during the questions cancels the run (exit code 1, nothing run).
 
 ## Stages
