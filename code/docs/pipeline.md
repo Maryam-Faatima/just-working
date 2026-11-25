@@ -32,6 +32,8 @@ The source is checked first, so a mistyped path fails before any question is ask
 | --ask | Always ask, even if answers are saved |
 | --no-ask | Never ask. Runs started without a terminal (scripts, CI) never ask either |
 
+Other options: --no-llm skips the LLM steps. --no-sim-cache asks the simulated user for fresh replies instead of the cached ones (slower, not repeatable, decision 69).
+
 Ctrl+C or Ctrl+D during the questions cancels the run (exit code 1, nothing run).
 
 ## Stages
@@ -49,6 +51,8 @@ The order follows slide 6: Phase 0 first, then Phase 1 (scan, call graph, model,
 
 Every run also writes run_summary.json: per stage the status, a detail line and the time taken,
 plus the spec path and the spec warnings.
+
+`run_pipeline` also takes an optional `progress` callback. It is called with `{stage, status, number, total}` when a stage starts (status `running`) and again with the result, `detail` and `seconds` when it ends. The API uses it for the per-stage status in `/api/status/{name}`. A callback that raises is ignored, so a listener bug cannot stop a run.
 
 ## The repo stays open for the whole run
 The pipeline keeps the repo open until the last stage finishes, so the testing stage can start the

@@ -41,3 +41,14 @@ python -m testing.runner fixtures/travel_seed_specs.json --agent-dir fixtures/ag
 ## Tests
 
 `tests/test_runner.py` uses fake backends (one that answers, one that crashes, one that times out), so it runs in under a second and needs no agent.
+
+## Running a LangGraph agent (decision 72)
+
+Any LangGraph repo can be tested without writing an adapter.
+
+- **Finding the graph.** With no entry point set, GreatTest reads `langgraph.json` in the repo and takes the first graph it lists (for example `./src/bot/graph.py:graph`). An entry point in `run_config` always wins. The launch form has an optional field for it.
+- **What it can be.** A compiled graph, an uncompiled `StateGraph` (compiled for you), or a factory function when `interface` is `langgraph`. Async graphs work.
+- **How it is called.** Each turn runs a child process that calls the graph with `{"messages": [...]}`: every user message so far with the agent's own earlier replies in between. The reply is the last text the graph added, and the tool calls come from the AI messages of that turn, paired with their tool results.
+- **Imports and keys.** The repo root and its `src/` folder are on the import path, so relative imports work. The repo's own `.env` supplies its keys, and anything already in the environment wins.
+- **Their dependencies.** The agent runs with the interpreter in `run_config.python` (default: the one running GreatTest). Install the agent's requirements there, or point `python` at its own virtual environment. `timeout_seconds` raises the per-turn limit for slow agents (default 120).
+- **Limits.** The graph must keep its conversation in `state["messages"]`. Tool calls made inside sub-graphs do not show in that list, so entries that depend on them stay unexercised.

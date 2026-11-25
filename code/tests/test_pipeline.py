@@ -63,7 +63,7 @@ def test_runs_every_stage_without_llm_and_writes_outputs(repo, tmp_path):
                              "infer": "skipped", "test": "ok", "check": "ok", "judge": "ok", "report": "ok"}
     test_stage = next(r for r in summary["stages"] if r["stage"] == "test")
     # the generator (EH-1) writes one test per tool; without a run config the agent cannot be started
-    assert test_stage["detail"] == "generated 2 seed test(s); not run: no entry point: answer the Phase 0 start-up questions (run_config) to run tests"
+    assert test_stage["detail"] == "generated 2 seed test(s); not run: no entry point: add langgraph.json, or answer the Phase 0 start-up questions (run_config)"
     assert len(json.loads((folder / "test_specs.json").read_text(encoding="utf-8"))) == 2
     assert len(lines) == len(summary["stages"])
     model = json.loads((folder / "model_v0.json").read_text(encoding="utf-8"))
@@ -348,3 +348,21 @@ def test_stage_scan_clears_the_last_runs_model_changes(monkeypatch, tmp_path):
     pipeline.stage_scan({"repo_root": tmp_path, "source": "x", "name": "demo", "out": None})
     assert not (tmp_path / "model_changes.json").exists()
     assert not (tmp_path / "model_v1.json").exists()
+
+
+def test_progress_reports_each_stage_start_and_end(repo, tmp_path):
+    events = []
+    summary, _ = run(repo, tmp_path, use_llm=False, progress=events.append)
+    for result in summary["stages"]:
+        mine = [e for e in events if e["stage"] == result["stage"]]
+        assert [e["status"] for e in mine] == ["running", result["status"]]
+        assert mine[-1]["detail"] == result["detail"] and mine[-1]["seconds"] == result["seconds"]
+    assert {e["total"] for e in events} == {len(pipeline.STAGES)}
+
+
+def test_a_broken_progress_listener_does_not_stop_the_run(repo, tmp_path):
+    def broken(event):
+        raise RuntimeError("listener bug")
+
+    summary, _ = run(repo, tmp_path, use_llm=False, progress=broken)
+    assert summary["ok"] is True

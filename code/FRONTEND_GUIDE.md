@@ -93,8 +93,9 @@ Open your browser at: **`http://localhost:5173`**
      - **Phase 3/5: AST Scan & Tools**: Detected tools, signatures, docstrings, and LangGraph nodes.
      - **Phase 4/5: Call Graph**: Caller-callee function explorer with file filters and search.
      - **Phase 5/5: Behavioral Model V0**: Extracted capabilities, state transitions, and constraints.
-4. **Real-Time Progress Indicator**:
-   - Live stage-by-stage status floating popup displayed at the bottom while pipeline execution is in progress.
+4. **Live Run Screen (stage by stage)**:
+   - Running the pipeline opens a full-page run screen. A stage rail shows every pipeline stage as waiting, processing, done, skipped or failed (from `stages` in `/api/status/{name}`).
+   - The running stage shows a processing animation; when it finishes its output opens in place (loaded from `/api/stage-output/{name}/{stage}`) and **Next stage** moves on. **Open full analysis** at the end loads the usual seven screens.
 
 5. **Live Model Changes**:
    - While a run is in progress, a panel at the bottom right lists the model entries that test results have moved (for example `con_003` unverified to contradicted, 60% to 30%), newest first, with the count of tests reconciled so far. It polls `/api/model-changes/{name}` every 1.5 seconds.

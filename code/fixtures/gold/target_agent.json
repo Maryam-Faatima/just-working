@@ -1,0 +1,15 @@
+{
+  "agent": "target_agent",
+  "source": "target_agent/ in this repository (LangGraph travel agent, built by the team)",
+  "labelled_by": "Maryam Fatima, from the source code, 21 Nov 2026",
+  "tools": [
+    "search_flights", "search_hotels", "get_weather", "get_exchange_rate", "get_destination_info",
+    "get_return_flights", "create_itinerary", "validate_itinerary", "book_flight", "reserve_hotel"
+  ],
+  "workflow_steps": [
+    "understand_request", "clarify", "plan_trip", "get_currency", "search_flights", "validate_flights",
+    "search_hotels", "validate_hotels", "get_weather", "get_destination_info", "select_options",
+    "select_return_flight", "create_itinerary", "validate_itinerary", "book_trip", "final_response"
+  ],
+  "constraints": []
+}

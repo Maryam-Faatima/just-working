@@ -202,6 +202,13 @@ export async function runJudgeEvaluation(agentName, { trace = null, traceFile = 
 
 // ---------------------------------------------------------------- Phase 2: test runs (EH-1 to EH-5)
 
+// Reproducibility study: how stable each verdict is across repeated runs (null if not run).
+export async function fetchAgentRepro(agentName) {
+  const res = await fetch(`${API_BASE}/repro/${encodeURIComponent(agentName)}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
 export async function fetchAgentTests(agentName) {
   const res = await fetch(`${API_BASE}/tests/${agentName}`);
   if (!res.ok) return null;
@@ -212,4 +219,16 @@ export async function fetchModelChanges(agentName) {
   const res = await fetch(`${API_BASE}/model-changes/${encodeURIComponent(agentName)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
+}
+
+// Output of one pipeline stage (null until the stage has written something).
+export async function fetchStageOutput(agentName, stage) {
+  try {
+    const res = await fetch(`${API_BASE}/stage-output/${encodeURIComponent(agentName)}/${encodeURIComponent(stage)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.output ?? null;
+  } catch {
+    return null;
+  }
 }

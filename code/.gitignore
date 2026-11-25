@@ -12,3 +12,4 @@ out.json
 repos/
 .coverage
 uploads/
+.llm_cache/

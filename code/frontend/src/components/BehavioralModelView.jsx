@@ -1,278 +1,131 @@
-import React, { useState } from 'react';
-import { LiveModelChanges, StatusBadge } from './LiveModelChanges';
+import React, { useMemo, useState } from 'react';
+import { LiveModelChanges } from './LiveModelChanges';
+
+const STATUS = {
+  confirmed: { color: 'var(--gt-ok)', label: 'Confirmed' },
+  contradicted: { color: 'var(--gt-bad)', label: 'Contradicted' },
+  discovered: { color: 'var(--gt-warn)', label: 'Discovered' },
+  unverified: { color: '#8fa0d6', label: 'Unverified' }
+};
+const stat = (s) => STATUS[s] || STATUS.unverified;
+const TYPES = {
+  capability: { label: 'Capability', color: 'var(--gt-accent-text)', hint: 'something the agent can do' },
+  workflow: { label: 'Workflow', color: '#7aa2ff', hint: 'a step or state in how it works' },
+  constraint: { label: 'Constraint', color: 'var(--gt-warn)', hint: 'a rule it should follow' }
+};
+const typeOf = (t) => TYPES[t] || { label: t || 'Entry', color: '#8fa0d6', hint: '' };
 
 export function BehavioralModelView({ modelData, onSelectEntry, currentAgent }) {
-  const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'capability' | 'workflow'
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [open, setOpen] = useState(null);
+
+  const entries = useMemo(() => (modelData && modelData.entries) || [], [modelData]);
+  const count = (t) => entries.filter((e) => e.type === t).length;
+
+  const shown = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return entries.filter((e) => (
+      (filterType === 'ALL' || e.type === filterType)
+      && (filterStatus === 'all' || (e.status || 'unverified') === filterStatus)
+      && (!q || (e.name || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q))
+    ));
+  }, [entries, filterType, filterStatus, searchQuery]);
 
   if (!modelData) {
     return (
-      <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto', padding: '0 24px', textAlign: 'center' }}>
-        <div style={{ background: '#fff', borderRadius: 'var(--radius-lg)', padding: '48px 24px', border: '1.5px solid var(--border-default)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink-primary)' }}>No Behavioral Model Data</h3>
-          <p style={{ color: 'var(--ink-muted)', marginTop: '8px' }}>Model V0 has not been synthesized yet for this agent.</p>
-        </div>
-      </div>
+      <div className="cg"><div className="gt-glass cg-empty">
+        <h3>No behavioral model yet</h3>
+        <p>The model is built after the code scan. It will appear here as soon as that stage finishes.</p>
+      </div></div>
     );
   }
 
-  const entries = modelData.entries || [];
-  const capabilities = entries.filter(e => e.type === 'capability');
-  const workflows = entries.filter(e => e.type === 'workflow');
-  const constraints = entries.filter(e => e.type === 'constraint');
-
-  const filteredEntries = entries.filter(e => {
-    const matchType = filterType === 'ALL' || e.type === filterType;
-    const matchSearch = e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (e.description && e.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchType && matchSearch;
-  });
+  const statusCounts = Object.keys(STATUS).map((s) => [s, entries.filter((e) => (e.status || 'unverified') === s).length]);
+  const total = entries.length || 1;
 
   return (
-    <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto 80px', padding: '0 24px' }}>
-      {/* Eyebrow Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          color: 'var(--accent)',
-          fontSize: '11px',
-          fontWeight: 800,
-          textTransform: 'uppercase',
-          letterSpacing: '0.8px',
-          marginBottom: '6px'
-        }}>
-          <span>✦</span> Behavioral Model {(modelData.version || 'v0').toUpperCase()}
+    <div className="cg animate-fade-in">
+      <div className="cg-head">
+        <div>
+          <div className="gt-eyebrow"><i /> Behavioral model {(modelData.version || 'v0').toUpperCase()}</div>
+          <h1>What we think your agent does</h1>
+          <p>Each entry is a claim about the agent, found by the code scanner or the language model, with the code that backs it up. Tests later confirm or contradict these claims.</p>
         </div>
-        <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.6px' }}>
-          Extracted Capabilities & Workflow Constraints
-        </h1>
-        <p style={{ color: 'var(--ink-secondary)', fontSize: '14.5px', marginTop: '4px' }}>
-          Synthesized claims from rule-based AST scanner + LLM inference cross-checking, with evidence anchored in repository code.
-        </p>
-      </div>
-
-      {/* Entries that tests have moved, newest first */}
-      <LiveModelChanges agentName={currentAgent} />
-
-      {/* Metrics Row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '14px',
-        marginBottom: '28px'
-      }}>
-        <div style={{ background: '#fff', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase' }}>Capabilities</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '26px', fontWeight: 800, color: 'var(--accent)', marginTop: '4px' }}>
-            {capabilities.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: '2px' }}>functional actions & tools</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Workflow States</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '26px', fontWeight: 800, color: 'var(--ink-primary)', marginTop: '4px' }}>
-            {workflows.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: '2px' }}>orchestration nodes & guardrails</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Inferred Constraints</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '26px', fontWeight: 800, color: 'var(--ink-primary)', marginTop: '4px' }}>
-            {constraints.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: '2px' }}>rules extracted by LLM & AST</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--status-confirmed)', textTransform: 'uppercase' }}>Model Version</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '26px', fontWeight: 800, color: 'var(--status-confirmed)', marginTop: '4px' }}>
-            {modelData.version || 'v0'}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)', marginTop: '2px' }}>initial pre-execution baseline</div>
+        <div className="cg-stats">
+          <div className="cg-stat"><div className="k">Capabilities</div><div className="v" style={{ color: TYPES.capability.color }}>{count('capability')}</div></div>
+          <div className="cg-stat"><div className="k">Workflow</div><div className="v" style={{ color: TYPES.workflow.color }}>{count('workflow')}</div></div>
+          <div className="cg-stat"><div className="k">Constraints</div><div className="v" style={{ color: TYPES.constraint.color }}>{count('constraint')}</div></div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-        marginBottom: '20px'
-      }}>
-        <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-inset)', padding: '4px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
-          {[
-            { id: 'ALL', label: `All Entries (${entries.length})` },
-            { id: 'capability', label: `Capabilities (${capabilities.length})` },
-            { id: 'workflow', label: `Workflow States (${workflows.length})` },
-            { id: 'constraint', label: `Inferred Constraints (${constraints.length})` }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterType(tab.id)}
-              style={{
-                border: 'none',
-                background: filterType === tab.id ? '#fff' : 'transparent',
-                color: filterType === tab.id ? 'var(--ink-primary)' : 'var(--ink-muted)',
-                fontWeight: filterType === tab.id ? 700 : 500,
-                fontSize: '12.5px',
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer',
-                boxShadow: filterType === tab.id ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {tab.label}
-            </button>
+      <div className="legacy-canvas gt-out-sheet" style={{ marginBottom: '16px', padding: '4px 0' }}>
+        <LiveModelChanges agentName={currentAgent} />
+      </div>
+
+      <div className="gt-glass ev-card" style={{ marginBottom: '16px' }}>
+        <div className="ev-h">How well each entry has been checked</div>
+        <div className="ev-split">
+          {statusCounts.map(([s, n]) => n > 0 && <i key={s} style={{ width: `${(n / total) * 100}%`, background: stat(s).color }} title={`${stat(s).label}: ${n}`} />)}
+        </div>
+        <div className="ev-legend">
+          {statusCounts.map(([s, n]) => <span key={s}><i style={{ background: stat(s).color }} />{stat(s).label} <b>{n}</b></span>)}
+        </div>
+      </div>
+
+      <div className="bm-bar">
+        <div className="cg-tabs" style={{ margin: 0 }}>
+          {[['ALL', `All ${entries.length}`], ['capability', `Capabilities ${count('capability')}`], ['workflow', `Workflow ${count('workflow')}`], ['constraint', `Constraints ${count('constraint')}`]].map(([id, label]) => (
+            <button type="button" key={id} className={filterType === id ? 'on' : ''} onClick={() => setFilterType(id)}>{label}</button>
           ))}
         </div>
-
-        <input
-          type="text"
-          placeholder="Filter by capability or workflow..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            padding: '8px 14px',
-            borderRadius: 'var(--radius-full)',
-            border: '1px solid var(--border-default)',
-            fontSize: '12.5px',
-            fontFamily: 'var(--font-sans)',
-            background: '#fff',
-            outline: 'none',
-            minWidth: '240px'
-          }}
-        />
+        <div className="gt-pills">
+          {['all', ...Object.keys(STATUS)].map((s) => (
+            <button type="button" key={s} className={`gt-pill${filterStatus === s ? ' on' : ''}`} style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setFilterStatus(s)}>{s === 'all' ? 'Any status' : STATUS[s].label}</button>
+          ))}
+        </div>
+        <input className="gt-field bm-search" type="text" placeholder="Search entries…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>
 
-      {/* Entries Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
-        {filteredEntries.map(entry => {
-          const isCap = entry.type === 'capability';
-          const confPct = Math.round((entry.confidence || 0) * 100);
+      {shown.length === 0 && <div className="gt-glass cg-empty"><h3>Nothing matches</h3><p>Try a different filter or search.</p></div>}
 
+      <div className="bm-grid">
+        {shown.map((entry) => {
+          const t = typeOf(entry.type);
+          const st = stat(entry.status);
+          const conf = Math.round((entry.confidence || 0) * 100);
+          const isOpen = open === entry.id;
+          const cons = entry.constraints || [];
+          const ev = entry.evidence || [];
           return (
-            <div
-              key={entry.id}
-              onClick={() => onSelectEntry && onSelectEntry(entry)}
-              style={{
-                background: '#fff',
-                borderRadius: 'var(--radius-md)',
-                border: '1.5px solid var(--border-default)',
-                padding: '20px',
-                boxShadow: 'var(--shadow-card)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      background: 'var(--bg-inset)',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      color: 'var(--ink-secondary)'
-                    }}>
-                      {entry.id}
-                    </span>
-                    <span style={{
-                      fontSize: '10.5px',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '2px 7px',
-                      borderRadius: '4px',
-                      background: isCap ? 'var(--accent-light)' : '#E0F2FE',
-                      color: isCap ? 'var(--accent)' : '#0284C7'
-                    }}>
-                      {entry.type}
-                    </span>
-                    <StatusBadge status={entry.status} />
-                  </div>
-
-                  <span style={{
-                    fontSize: '10.5px',
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    color: 'var(--ink-muted)'
-                  }}>
-                    {entry.detected_by}
-                  </span>
+            <div key={entry.id} className={`gt-glass bm-card${isOpen ? ' open' : ''}`} style={{ '--bm': t.color }}>
+              <button type="button" className="bm-top" onClick={() => { setOpen(isOpen ? null : entry.id); if (onSelectEntry) onSelectEntry(entry); }}>
+                <div className="bm-tags">
+                  <span className="bm-type" style={{ color: t.color }}>{t.label}</span>
+                  <span className="bm-st"><i style={{ background: st.color }} />{st.label}</span>
+                  <span className="bm-id">{entry.id}</span>
                 </div>
-
-                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--ink-primary)', fontFamily: 'var(--font-mono)', marginBottom: '6px' }}>
-                  {entry.name}
-                </h3>
-
-                <p style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', lineHeight: 1.5, marginBottom: '14px' }}>
-                  {entry.description}
-                </p>
-
-                {/* Constraints list if any */}
-                {entry.constraints && entry.constraints.length > 0 && (
-                  <div style={{ marginBottom: '14px' }}>
-                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Identified Constraints ({entry.constraints.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {entry.constraints.map((c, cidx) => (
-                        <div
-                          key={cidx}
-                          style={{
-                            fontSize: '11.5px',
-                            color: 'var(--ink-primary)',
-                            background: 'var(--bg-surface-soft)',
-                            border: '1px solid var(--border-subtle)',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            lineHeight: 1.4
-                          }}
-                        >
-                          • {c}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <h3>{entry.name}</h3>
+                <p>{entry.description}</p>
+              </button>
+              <div className="bm-conf">
+                <div className="row"><span>How sure we are</span><b>{conf}%</b></div>
+                <div className="track"><div style={{ width: `${conf}%`, background: st.color }} /></div>
               </div>
-
-              {/* Bottom Confidence Bar & File Anchoring */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--ink-muted)' }}>Confidence</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--ink-primary)' }}>{confPct}%</span>
+              {isOpen && (
+                <div className="bm-more">
+                  {cons.length > 0 && (
+                    <div><div className="h">Rules found ({cons.length})</div>{cons.map((c, i) => <div key={i} className="bm-con">{c}</div>)}</div>
+                  )}
+                  {ev.length > 0 && (
+                    <div><div className="h">Where in the code</div>{ev.map((x, i) => <div key={i} className="bm-ev"><span>{x.file}</span><span>L{x.lines}</span></div>)}</div>
+                  )}
+                  {entry.detected_by && <div className="bm-by">Found by {entry.detected_by}</div>}
+                  {cons.length === 0 && ev.length === 0 && <div className="bm-by">No extra detail recorded for this entry.</div>}
                 </div>
-                <div style={{ width: '100%', height: '5px', background: 'var(--bg-inset)', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
-                  <div style={{ width: `${confPct}%`, height: '100%', background: isCap ? 'var(--accent)' : '#0284C7', borderRadius: '3px' }} />
-                </div>
-
-                {entry.evidence && entry.evidence.length > 0 && (
-                  <div style={{
-                    borderTop: '1px dashed var(--border-subtle)',
-                    paddingTop: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '10.5px',
-                    color: 'var(--ink-muted)',
-                    fontFamily: 'var(--font-mono)'
-                  }}>
-                    <span>{entry.evidence[0].file}</span>
-                    <span>L{entry.evidence[0].lines}</span>
-                  </div>
-                )}
-              </div>
+              )}
+              {!isOpen && (cons.length > 0 || ev.length > 0) && <div className="bm-hint">{cons.length ? `${cons.length} rules` : ''}{cons.length && ev.length ? ' · ' : ''}{ev.length ? `${ev.length} code refs` : ''} · click to expand</div>}
             </div>
           );
         })}

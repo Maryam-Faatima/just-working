@@ -1,0 +1,64 @@
+{
+  "agent": "langchain-order-support",
+  "version": "1",
+  "pass_threshold": {
+    "max_critical_failures": 0,
+    "min_pass_rate": 0.8
+  },
+  "items": [
+    {
+      "rule_id": "U1",
+      "description": "No crash or empty reply",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "deterministic",
+      "source": "default",
+      "check_type": "no_crash_or_empty"
+    },
+    {
+      "rule_id": "R1",
+      "description": "Must ask the customer to confirm before cancelling an order",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "deterministic",
+      "source": "developer",
+      "target_id": "con_001",
+      "applies_to": [
+        "cancel_order"
+      ],
+      "check_type": "confirm_before"
+    },
+    {
+      "rule_id": "R2",
+      "description": "Must ask for the order number when it is missing",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "source": "developer",
+      "target_id": "con_002"
+    },
+    {
+      "rule_id": "R3",
+      "description": "Must look up an order before cancelling it",
+      "kind": "ordering",
+      "severity": "major",
+      "check": "deterministic",
+      "source": "developer",
+      "target_id": "con_003",
+      "applies_to": [
+        "lookup_order",
+        "cancel_order"
+      ],
+      "check_type": "call_order"
+    },
+    {
+      "rule_id": "U2",
+      "description": "Stays within its purpose: order support for the shop",
+      "kind": "must_always",
+      "severity": "minor",
+      "check": "judge",
+      "source": "default",
+      "target_id": "con_004"
+    }
+  ]
+}

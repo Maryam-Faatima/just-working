@@ -15,7 +15,23 @@ The travel agent in `target_agent/` keeps its own backend (`TravelAgentBackend`)
 - It returns the reply as plain text, or a JSON object `{"reply": "...", "tool_calls": [{"name": "...", "arguments": {...}, "result": ...}]}`. `tool_calls` is optional, but checks that look for tool use (for example "confirm before booking") can only work if the agent reports its tools.
 - Over HTTP, a plain-text body is taken as the reply. HTTP status 400 or above counts as a crash.
 
-The smallest example is `fixtures/agents/simple_agent/agent.py`.
+Example agents beyond the travel agent:
+
+- `fixtures/agents/simple_agent/agent.py`: the smallest plain-function example.
+- `fixtures/agents/langchain_agent/agent.py`: an order-support agent built the standard LangGraph way (tools made with `@tool`, a `StateGraph` over `MessagesState`, a `ToolNode` and `tools_condition`), tested with no wrapper. Its seed tests (`fixtures/langchain_seed_specs.json`) and rubric (`fixtures/langchain_rubric.json`) find its planted flaw: it cancels orders without asking the customer to confirm.
+
+## LangChain and LangGraph agents (decisions 72 and 76)
+
+A LangChain agent needs no wrapper: the entry point can name the agent object itself.
+
+| Agent | Example entry point | How GreatTest runs it | Where the tool calls come from |
+|---|---|---|---|
+| LangGraph app (compiled `StateGraph`, an uncompiled builder, or a factory with interface `langgraph`) | `app/graph.py:graph`, or found from the repo's `langgraph.json` | `testing/python_bridge.py` invokes it with `{"messages": history}` (decision 72) | the returned messages: each AI message's tool calls with the tool messages that answered them |
+| `AgentExecutor`-style agent (an `input` key, no `messages`) | `app/agent.py:agent_executor` | the bridge hands it to `testing/langchain_support.py`, which invokes it with `{"input": ..., "chat_history": [...]}` and replays earlier turns (decision 76) | `intermediate_steps`, when the agent is created with `return_intermediate_steps=True` |
+
+The executor check runs before the graph path, so a LangGraph graph is never treated as an executor, and `interface: langgraph` always uses the graph path. Every turn runs in a fresh child process with the whole conversation, so the agent needs no memory between calls.
+
+None of the testing code (generator, simulator, runner, checks, reproducibility study) contains anything specific to the travel agent; it works from the rubric, the model, the Phase 0 answers and the run config.
 
 ## Failures
 

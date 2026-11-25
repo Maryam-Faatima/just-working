@@ -88,56 +88,6 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
 }
 
-/* Focused Ambient Theme: Warm Orange & Charcoal Glow with Gentle Dynamic Float */
-@keyframes ambientFloatOne {
-  0% { transform: translate(0px, 0px) scale(1); }
-  33% { transform: translate(-65px, 45px) scale(1.14); }
-  66% { transform: translate(35px, -35px) scale(0.95); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-
-@keyframes ambientFloatTwo {
-  0% { transform: translate(0px, 0px) scale(1); }
-  33% { transform: translate(55px, -45px) scale(1.12); }
-  66% { transform: translate(-45px, 35px) scale(0.92); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-
-@keyframes ambientGlowPulse {
-  0%, 100% { transform: translate(-50%, -48%) scale(1); opacity: 0.82; }
-  50% { transform: translate(-50%, -46%) scale(1.10); opacity: 1; }
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  top: -12%;
-  right: -8%;
-  width: 920px;
-  height: 920px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(224, 93, 56, 0.22) 0%, rgba(249, 115, 22, 0.10) 45%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-  animation: ambientFloatOne 16s ease-in-out infinite;
-  filter: blur(40px);
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  bottom: -15%;
-  left: -8%;
-  width: 860px;
-  height: 860px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(224, 93, 56, 0.18) 0%, rgba(28, 39, 64, 0.06) 50%, transparent 68%);
-  pointer-events: none;
-  z-index: 0;
-  animation: ambientFloatTwo 20s ease-in-out infinite;
-  filter: blur(45px);
-}
-
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -240,63 +190,6 @@ body::after {
   border-color: rgba(224, 93, 56, 0.35);
 }
 
-/* 3D Flip Card Styles */
-.flip-card-wrapper {
-  perspective: 1200px;
-  position: relative;
-  width: 100%;
-}
-
-.flip-card-glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -48%);
-  width: 125%;
-  height: 125%;
-  background: radial-gradient(circle closest-side, rgba(224, 93, 56, 0.42) 0%, rgba(249, 115, 22, 0.20) 45%, transparent 75%);
-  filter: blur(40px);
-  border-radius: 50%;
-  z-index: 0;
-  pointer-events: none;
-  animation: ambientGlowPulse 6s ease-in-out infinite alternate;
-}
-
-.flip-card-inner {
-  position: relative;
-  width: 100%;
-  height: 380px;
-  transform-style: preserve-3d;
-  transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
-  z-index: 1;
-}
-
-.flip-card-wrapper:hover .flip-card-inner,
-.flip-card-wrapper.flipped .flip-card-inner {
-  transform: rotateY(180deg);
-}
-
-.flip-card-front,
-.flip-card-back {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.flip-card-front {
-  transform: rotateY(0deg);
-}
-
-.flip-card-back {
-  transform: rotateY(180deg);
-}
-
 /* ==========================================================================
    Comprehensive Responsive Layout Breakpoints
    ========================================================================== */
@@ -370,7 +263,4 @@ body::after {
     padding: 5px 10px !important;
   }
 
-  .flip-card-inner {
-    height: 320px !important;
-  }
 }

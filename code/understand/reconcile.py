@@ -6,10 +6,13 @@ and confidence are updated through ModelStore.apply_outcome, tools the agent cal
 static analysis never found are added as `discovered`, and one finding is produced.
 
 Rules, in short:
-- Any failed check on a completed run contradicts the claim. The test fails if any check fails.
+- Any failed check on a completed run contradicts the claim, except a check marked moves_entry
+  False (a judge-scored default rule), which is reported but never moves the entry. The test
+  fails if any check fails.
 - No failures and the claim's tool was called: confirmed.
 - No failures and the tool was never called: unreachable only after UNREACHABLE_MIN_RUNS
-  completed runs. Fewer runs is inconclusive, so the model is left alone.
+  completed runs with no failed check at all. Fewer runs, or a failed check, is inconclusive,
+  so the model is left alone.
 - A crash or timeout says nothing about the claim, so the model is left alone. The crash is
   still reported as a critical finding, so it can never hang or pass silently.
 """
@@ -65,11 +68,15 @@ def classify_run(entry, run):
     trace = run["trace"]
     tools = _tool_names(entry)
     completed = trace["run_status"] == "completed"
+    failed = _failed_checks(run.get("checks", [])) if completed else []
     return {
         "trace_id": trace["trace_id"],
         "status": trace["run_status"],
         "error": trace.get("error", ""),
-        "failed": _failed_checks(run.get("checks", [])) if completed else [],
+        "failed": failed,
+        # Failures that may change the entry. A check marked moves_entry False (a judge-scored
+        # default rule) stays in "failed" for the finding but never moves the entry.
+        "moving": [c for c in failed if c.get("moves_entry", True)],
         "exercised": completed and (not tools or bool(tools & set(_called_tools(trace)))),
     }
 
@@ -79,11 +86,12 @@ def decide_outcome(infos):
     done = [r for r in infos if r["status"] == "completed"]
     if not done:
         return None
-    if any(r["failed"] for r in done):
+    if any(r["moving"] for r in done):
         return "contradicted"
     if any(r["exercised"] for r in done):
         return "confirmed"
-    if len(done) >= UNREACHABLE_MIN_RUNS:
+    # Unreachable needs clean runs. A run that failed a rule says the test did not go as planned.
+    if len(done) >= UNREACHABLE_MIN_RUNS and not any(r["failed"] for r in done):
         return "unreachable"
     return None
 
@@ -97,9 +105,9 @@ def _apply(store, entry_id, outcome, infos, test_id):
     done = [r for r in infos if r["status"] == "completed"]
     if outcome == "contradicted":
         for r in done:
-            if not r["failed"] and r["exercised"]:
+            if not r["moving"] and r["exercised"]:
                 store.add_evidence(entry_id, test_id, r["trace_id"])
-        steps = [("contradicted", r) for r in done if r["failed"]]
+        steps = [("contradicted", r) for r in done if r["moving"]]
     elif outcome == "confirmed":
         steps = [("confirmed", r) for r in done if r["exercised"]]
     else:
@@ -176,7 +184,10 @@ def reconcile(store, spec, runs, finding_id=None):
     before = copy.deepcopy(store.get(entry_id))
     infos = [classify_run(before, run) for run in runs]
     outcome = decide_outcome(infos)
-    sticky = before["status"] == "contradicted" and outcome in ("confirmed", "unreachable")
+    # A contradicted entry stays contradicted. A confirmed entry is not undone by a later test
+    # that never reached its tool: "not reached" is weaker evidence than "reached and held".
+    sticky = (before["status"] == "contradicted" and outcome in ("confirmed", "unreachable")) or (
+        before["status"] == "confirmed" and outcome == "unreachable")
     if sticky:
         _keep_evidence(store, entry_id, infos, spec["test_id"])
     elif outcome:
@@ -185,8 +196,10 @@ def reconcile(store, spec, runs, finding_id=None):
     after = store.get(entry_id)
 
     description = _description(before, infos, outcome)
-    if sticky:
+    if sticky and before["status"] == "contradicted":
         description += " The entry stays contradicted because an earlier test failed."
+    elif sticky:
+        description += " The entry stays confirmed because an earlier test exercised it."
     bad = [r for r in infos if r["failed"] or r["status"] != "completed"]
     finding = {
         "finding_id": finding_id or f"F-{spec['test_id']}",

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { GraphViewport } from './GraphViewport';
 
 export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
   const [activeTab, setActiveTab] = useState('tools'); // 'tools' | 'flow' | 'nodes' | 'edges' | 'registrations'
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNodeName, setSelectedNodeName] = useState(null);
   const [toolsLimit, setToolsLimit] = useState(24);
+  const [flowZoom, setFlowZoom] = useState(1);
 
   if (!scanData) {
     return (
@@ -244,7 +246,7 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
               </div>
 
               {/* Dynamic SVG Flowchart Canvas */}
-              <div style={{ width: '100%', overflowX: 'auto', textAlign: 'center' }}>
+              <GraphViewport zoom={flowZoom} setZoom={setFlowZoom} contentWidth={840} contentHeight={620} className="gt-gv-light">
                 {graphNodes.length === 0 ? (
                   <div style={{ padding: '60px 20px', color: 'var(--ink-muted)' }}>
                     <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--ink-primary)' }}>No LangGraph States Detected</p>
@@ -277,10 +279,9 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
                     <svg
                       viewBox={`0 0 860 ${totalHeight}`}
                       style={{
-                        width: '100%',
-                        maxWidth: '840px',
+                        width: `${840 * flowZoom}px`,
+                        maxWidth: 'none',
                         height: 'auto',
-                        minHeight: '520px',
                         filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.03))'
                       }}
                     >
@@ -502,7 +503,7 @@ export function ScanToolsView({ scanData, summaryData, onSelectTool }) {
                     </svg>
                   );
                 })()}
-              </div>
+              </GraphViewport>
             </div>
 
             {/* Right: Selected Node Inspector Panel */}

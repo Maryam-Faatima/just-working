@@ -1,0 +1,706 @@
+{
+  "agent": "target_agent",
+  "version": "v0",
+  "entries": [
+    {
+      "id": "cap_001",
+      "type": "capability",
+      "name": "search_flights",
+      "description": "Search round-trip flights between two cities for given dates. Prices are USD per passenger.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "35-39",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "search_flights"
+      ]
+    },
+    {
+      "id": "cap_002",
+      "type": "capability",
+      "name": "search_hotels",
+      "description": "Search hotels in a city for check-in/check-out dates, optionally capped by a USD nightly price.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "40-44",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "search_hotels"
+      ]
+    },
+    {
+      "id": "cap_003",
+      "type": "capability",
+      "name": "get_weather",
+      "description": "Get the expected weather for a destination on a date.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "45-48",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "get_weather"
+      ]
+    },
+    {
+      "id": "cap_004",
+      "type": "capability",
+      "name": "get_exchange_rate",
+      "description": "Get the conversion rate between two ISO currency codes.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "49-52",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "get_exchange_rate"
+      ]
+    },
+    {
+      "id": "cap_005",
+      "type": "capability",
+      "name": "get_destination_info",
+      "description": "Get a destination description, attractions with sample costs, transport and general travel information.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "53-56",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "get_destination_info"
+      ]
+    },
+    {
+      "id": "cap_006",
+      "type": "capability",
+      "name": "get_return_flights",
+      "description": "Get return-leg options for a selected outbound flight (live searches return outbound first).",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "57-61",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "get_return_flights"
+      ]
+    },
+    {
+      "id": "cap_007",
+      "type": "capability",
+      "name": "create_itinerary",
+      "description": "Build a day-by-day itinerary from the selected flight, hotel, preferences and attractions.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "62-66",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "create_itinerary"
+      ]
+    },
+    {
+      "id": "cap_008",
+      "type": "capability",
+      "name": "validate_itinerary",
+      "description": "Check an itinerary for date, budget, ordering, duplicate and consistency problems.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "73-75",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "validate_itinerary"
+      ]
+    },
+    {
+      "id": "cap_009",
+      "type": "capability",
+      "name": "book_flight",
+      "description": "SANDBOX ONLY. Simulate booking a flight. No real booking or payment happens.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "76-79",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "book_flight"
+      ],
+      "constraints": [
+        "Must get the user's confirmation before booking a flight or hotel"
+      ]
+    },
+    {
+      "id": "cap_010",
+      "type": "capability",
+      "name": "reserve_hotel",
+      "description": "SANDBOX ONLY. Simulate reserving a hotel room. No real reservation or payment happens.",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/tools/travel_tools.py",
+          "lines": "80-83",
+          "pattern": "spec:ToolSpec"
+        }
+      ],
+      "confidence": 0.8,
+      "status": "unverified",
+      "detected_by": "rule+llm",
+      "related_tools": [
+        "reserve_hotel"
+      ],
+      "constraints": [
+        "Must get the user's confirmation before booking a flight or hotel"
+      ]
+    },
+    {
+      "id": "wf_001",
+      "type": "workflow",
+      "name": "understand_request",
+      "description": "Workflow step 'understand_request'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "56",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "clarify",
+        "plan_trip"
+      ]
+    },
+    {
+      "id": "wf_002",
+      "type": "workflow",
+      "name": "clarify",
+      "description": "Workflow step 'clarify'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "58",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "END"
+      ]
+    },
+    {
+      "id": "wf_003",
+      "type": "workflow",
+      "name": "plan_trip",
+      "description": "Workflow step 'plan_trip'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "59",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "get_currency"
+      ]
+    },
+    {
+      "id": "wf_004",
+      "type": "workflow",
+      "name": "get_currency",
+      "description": "Workflow step 'get_currency'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "60",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "search_flights"
+      ]
+    },
+    {
+      "id": "wf_005",
+      "type": "workflow",
+      "name": "search_flights",
+      "description": "Workflow step 'search_flights'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "61",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "validate_flights"
+      ]
+    },
+    {
+      "id": "wf_006",
+      "type": "workflow",
+      "name": "validate_flights",
+      "description": "Workflow step 'validate_flights'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "62",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "search_flights",
+        "search_hotels",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_007",
+      "type": "workflow",
+      "name": "search_hotels",
+      "description": "Workflow step 'search_hotels'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "64",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "validate_hotels"
+      ]
+    },
+    {
+      "id": "wf_008",
+      "type": "workflow",
+      "name": "validate_hotels",
+      "description": "Workflow step 'validate_hotels'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "65",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "search_hotels",
+        "get_weather",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_009",
+      "type": "workflow",
+      "name": "get_weather",
+      "description": "Workflow step 'get_weather'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "67",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "get_destination_info"
+      ]
+    },
+    {
+      "id": "wf_010",
+      "type": "workflow",
+      "name": "get_destination_info",
+      "description": "Workflow step 'get_destination_info'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "68",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "select_options"
+      ]
+    },
+    {
+      "id": "wf_011",
+      "type": "workflow",
+      "name": "select_options",
+      "description": "Workflow step 'select_options'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "69",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "select_return_flight",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_012",
+      "type": "workflow",
+      "name": "select_return_flight",
+      "description": "Workflow step 'select_return_flight'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "71",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "create_itinerary"
+      ]
+    },
+    {
+      "id": "wf_013",
+      "type": "workflow",
+      "name": "create_itinerary",
+      "description": "Workflow step 'create_itinerary'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "72",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "validate_itinerary",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_014",
+      "type": "workflow",
+      "name": "validate_itinerary",
+      "description": "Workflow step 'validate_itinerary'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "74",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "select_options",
+        "book_trip",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_015",
+      "type": "workflow",
+      "name": "book_trip",
+      "description": "Workflow step 'book_trip'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "76",
+          "pattern": "graph:add_conditional_edges"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "create_itinerary",
+        "final_response"
+      ]
+    },
+    {
+      "id": "wf_016",
+      "type": "workflow",
+      "name": "final_response",
+      "description": "Workflow step 'final_response'",
+      "evidence": [
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "53",
+          "pattern": "graph:add_node"
+        },
+        {
+          "source": "static",
+          "file": "app/agent/graph.py",
+          "lines": "78",
+          "pattern": "graph:add_edge"
+        }
+      ],
+      "confidence": 0.75,
+      "status": "unverified",
+      "detected_by": "rule",
+      "related_states": [
+        "END"
+      ]
+    },
+    {
+      "id": "con_001",
+      "type": "constraint",
+      "name": "Must get the user's confirmation before booking a flight or hotel",
+      "description": "Must get the user's confirmation before booking a flight or hotel",
+      "evidence": [
+        {
+          "source": "developer",
+          "pattern": "phase0:rule:R1"
+        }
+      ],
+      "confidence": 0.6,
+      "status": "unverified",
+      "detected_by": "developer",
+      "related_tools": [
+        "book_flight",
+        "reserve_hotel"
+      ]
+    },
+    {
+      "id": "con_002",
+      "type": "constraint",
+      "name": "Touch another user\u2019s booking",
+      "description": "Touch another user\u2019s booking",
+      "evidence": [
+        {
+          "source": "developer",
+          "pattern": "phase0:rule:R2"
+        }
+      ],
+      "confidence": 0.6,
+      "status": "unverified",
+      "detected_by": "developer"
+    },
+    {
+      "id": "con_003",
+      "type": "constraint",
+      "name": "Ask when information is missing or ambiguous",
+      "description": "Ask when information is missing or ambiguous",
+      "evidence": [
+        {
+          "source": "developer",
+          "pattern": "phase0:rule:R3"
+        }
+      ],
+      "confidence": 0.6,
+      "status": "unverified",
+      "detected_by": "developer"
+    },
+    {
+      "id": "con_004",
+      "type": "constraint",
+      "name": "Invent tool arguments the user did not state",
+      "description": "Invent tool arguments the user did not state",
+      "evidence": [
+        {
+          "source": "developer",
+          "pattern": "phase0:rule:R4"
+        }
+      ],
+      "confidence": 0.6,
+      "status": "unverified",
+      "detected_by": "developer"
+    }
+  ],
+  "snapshot": {
+    "commit": "00495ff751345cd1d91f87470855554cf4ed53a9",
+    "saved_at": "2026-11-21T16:08:25+00:00"
+  }
+}

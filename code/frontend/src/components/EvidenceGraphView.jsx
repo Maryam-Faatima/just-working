@@ -1,1065 +1,383 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { escapeHtml, mdToHtml, reportSection } from '../utils/mdToHtml';
+import React, { useMemo, useState } from 'react';
+import { GraphViewport } from './GraphViewport';
+import { EvidenceGraphLegacy } from './EvidenceReportLegacy';
 
-export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
-  const [activeTab, setActiveTab] = useState('visual'); // 'visual' | 'chains' | 'report' | 'json'
-  const [filterType, setFilterType] = useState('ALL');
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
-  const [hoveredNodeId, setHoveredNodeId] = useState(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const svgRef = useRef(null);
+const NODE_W = 224;
+const NODE_H = 58;
+const COL_GAP = 92;
+const ROW_GAP = 14;
+const PAD = 28;
+const HEAD = 34;
+const COL_CAP = 12;
 
-  if (!evidenceData) {
-    return (
-      <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto', padding: '0 24px', textAlign: 'center' }}>
-        <div style={{ background: '#fff', borderRadius: 'var(--radius-lg)', padding: '56px 24px', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{
-            width: '54px',
-            height: '54px',
-            borderRadius: '14px',
-            background: 'var(--bg-inset)',
-            color: 'var(--ink-muted)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '16px',
-            border: '1px solid var(--border-default)'
-          }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="6" r="3" />
-              <circle cx="18" cy="18" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M6 9v6M9 6h6M18 9v6" />
-            </svg>
-          </div>
-          <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink-primary)', marginBottom: '8px' }}>
-            No Evidence Graph Available for {currentAgent || 'this agent'}
-          </h3>
-          <p style={{ color: 'var(--ink-muted)', fontSize: '14.5px', maxWidth: '480px', margin: '0 auto', lineHeight: 1.5 }}>
-            Run the pipeline on this agent to execute <strong>Stage 7 (Evidence & Report)</strong> and synthesize the audit graph.
-          </p>
-        </div>
-      </div>
-    );
+const STATUS = {
+  confirmed: { color: 'var(--gt-ok)', label: 'Confirmed' },
+  contradicted: { color: 'var(--gt-bad)', label: 'Contradicted' },
+  discovered: { color: 'var(--gt-warn)', label: 'Discovered' },
+  unverified: { color: '#8fa0d6', label: 'Unverified' }
+};
+const stat = (s) => STATUS[s] || STATUS.unverified;
+const STATUS_ORDER = ['contradicted', 'discovered', 'confirmed', 'unverified'];
+
+// Column = kind. Sources sit left, the finding on the right.
+const KINDS = {
+  code_location: { col: 0, label: 'Code', color: '#7aa2ff' },
+  developer_rule: { col: 0, label: 'Your rule', color: 'var(--gt-warn)' },
+  model_entry: { col: 1, label: 'Model entry', color: 'var(--gt-accent-text)' },
+  test_spec: { col: 2, label: 'Test', color: '#c084fc' },
+  trace: { col: 3, label: 'Conversation', color: '#2dd4bf' },
+  finding: { col: 4, label: 'Finding', color: '#f472b6' }
+};
+const COL_TITLES = ['Where it came from', 'What we believe', 'How we tested it', 'What happened', 'What we concluded'];
+
+const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s || '');
+const pct = (v) => (typeof v === 'number' ? `${Math.round(v * 100)}%` : '—');
+
+function titleOf(n) {
+  switch (n.kind) {
+    case 'code_location': return n.file.split('/').pop();
+    case 'developer_rule': return `${n.rule_id}: ${n.description}`;
+    case 'model_entry': return n.name;
+    case 'test_spec': return n.test_id;
+    case 'trace': return n.trace_id;
+    case 'finding': return n.finding_id;
+    default: return n.id;
   }
+}
+function subOf(n) {
+  switch (n.kind) {
+    case 'code_location': return `lines ${n.lines}${n.pattern ? ` · ${n.pattern}` : ''}`;
+    case 'developer_rule': return `${n.rule_kind || 'rule'} · ${n.severity || ''}`;
+    case 'model_entry': return `${n.entry_type} · ${pct(n.confidence)} sure`;
+    case 'test_spec': return 'test scenario';
+    case 'trace': return 'recorded run';
+    case 'finding': return `${n.result || ''}${n.severity ? ` · ${n.severity}` : ''}`;
+    default: return '';
+  }
+}
+function accentOf(n) {
+  if (n.kind === 'model_entry') return stat(n.status).color;
+  if (n.kind === 'finding') return n.result === 'pass' ? 'var(--gt-ok)' : 'var(--gt-bad)';
+  return KINDS[n.kind]?.color || '#8fa0d6';
+}
 
-  const nodes = evidenceData.nodes || [];
-  const edges = evidenceData.edges || [];
-  const stats = evidenceData.stats || {};
+function buildIndex(data) {
+  const nodes = new Map((data.nodes || []).map((n) => [n.id, n]));
+  const out = new Map();
+  const inn = new Map();
+  (data.edges || []).forEach((e) => {
+    if (!nodes.has(e.from) || !nodes.has(e.to)) return;
+    (out.get(e.from) || out.set(e.from, []).get(e.from)).push({ to: e.to, relation: e.relation });
+    (inn.get(e.to) || inn.set(e.to, []).get(e.to)).push({ from: e.from, relation: e.relation });
+  });
+  const entries = [...nodes.values()].filter((n) => n.kind === 'model_entry');
+  const findings = [...nodes.values()].filter((n) => n.kind === 'finding');
+  const entryOfFinding = new Map();
+  findings.forEach((f) => {
+    const hit = (inn.get(f.id) || []).find((e) => e.relation === 'has_finding');
+    if (hit) entryOfFinding.set(f.id, hit.from);
+  });
+  return { nodes, out, inn, entries, findings, entryOfFinding };
+}
 
-  // Group nodes by kind
-  const modelEntries = useMemo(() => nodes.filter(n => n.kind === 'model_entry'), [nodes]);
-  const codeLocations = useMemo(() => nodes.filter(n => n.kind === 'code_location'), [nodes]);
-  const developerRules = useMemo(() => nodes.filter(n => n.kind === 'developer_rule'), [nodes]);
-  const testSpecs = useMemo(() => nodes.filter(n => n.kind === 'test_spec'), [nodes]);
-  const traces = useMemo(() => nodes.filter(n => n.kind === 'trace'), [nodes]);
-  const findings = useMemo(() => nodes.filter(n => n.kind === 'finding'), [nodes]);
-
-  // Node Map
-  const nodeMap = useMemo(() => {
-    const map = new Map();
-    nodes.forEach(n => map.set(n.id, n));
-    return map;
-  }, [nodes]);
-
-  // Compute Active/Connected Subgraph when a node is selected or hovered
-  const activeFocusId = selectedNodeId || hoveredNodeId;
-  const connectedIds = useMemo(() => {
-    if (!activeFocusId) return new Set();
-    const set = new Set([activeFocusId]);
-
-    // Direct incoming and outgoing edges
-    edges.forEach(e => {
-      if (e.from === activeFocusId) set.add(e.to);
-      if (e.to === activeFocusId) set.add(e.from);
-    });
-
-    // 2-hop traversal so full chain lights up
-    edges.forEach(e => {
-      if (set.has(e.from)) set.add(e.to);
-      if (set.has(e.to)) set.add(e.from);
-    });
-
-    return set;
-  }, [activeFocusId, edges]);
-
-  // -----------------------------------------------------------------
-  // 2D GRAPH LAYOUT COMPUTATION FOR VISUAL CANVAS
-  // -----------------------------------------------------------------
-  const layout = useMemo(() => {
-    // 4 Columns:
-    // Col 0: Sources (Code Locations + Rules)
-    // Col 1: Claims (Model Entries)
-    // Col 2: Tests & Traces
-    // Col 3: Findings
-    const colX = [40, 420, 800, 1140];
-    const nodeWidth = 260;
-    const nodeHeight = 64;
-    const verticalGap = 16;
-
-    // Filter nodes if filterType is active
-    const filteredNodes = nodes.filter(n => {
-      if (filterType === 'CAPABILITY') return n.entry_type === 'capability';
-      if (filterType === 'CONSTRAINT') return n.entry_type === 'constraint' || n.kind === 'developer_rule';
-      if (filterType === 'WORKFLOW') return n.entry_type === 'workflow';
-      if (filterType === 'FINDINGS') return n.kind === 'finding';
-      return true;
-    });
-
-    const col0 = [...developerRules, ...codeLocations].filter(n => filteredNodes.some(fn => fn.id === n.id));
-    const col1 = [...modelEntries].filter(n => filteredNodes.some(fn => fn.id === n.id));
-    const col2 = [...testSpecs, ...traces].filter(n => filteredNodes.some(fn => fn.id === n.id));
-    const col3 = [...findings].filter(n => filteredNodes.some(fn => fn.id === n.id));
-
-    const maxColCount = Math.max(col0.length, col1.length, col2.length, col3.length, 6);
-    const canvasHeight = Math.max(680, maxColCount * (nodeHeight + verticalGap) + 80);
-
-    const positions = new Map();
-
-    const placeCol = (items, cIdx) => {
-      const totalH = items.length * (nodeHeight + verticalGap) - verticalGap;
-      let startY = Math.max(50, (canvasHeight - totalH) / 2);
-      items.forEach((item, rIdx) => {
-        const y = startY + rIdx * (nodeHeight + verticalGap);
-        positions.set(item.id, {
-          x: colX[cIdx],
-          y,
-          width: nodeWidth,
-          height: nodeHeight,
-          node: item,
-          col: cIdx
-        });
-      });
-    };
-
-    placeCol(col0, 0);
-    placeCol(col1, 1);
-    placeCol(col2, 2);
-    placeCol(col3, 3);
-
-    return {
-      canvasWidth: 1450,
-      canvasHeight,
-      positions,
-      colX,
-      nodeWidth,
-      nodeHeight
-    };
-  }, [nodes, codeLocations, developerRules, modelEntries, testSpecs, traces, findings, filterType]);
-
-  // Selected node object
-  const selectedNodeObj = selectedNodeId ? nodeMap.get(selectedNodeId) : null;
-
-  // -----------------------------------------------------------------
-  // PDF REPORT DOWNLOAD HANDLER
-  // -----------------------------------------------------------------
-  const handleDownloadPDF = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Please allow popups to generate and download the PDF report.');
-      return;
+// Everything connected to one entry: sources behind it, tests/traces/findings after it.
+function chainOf(ix, entryId) {
+  const found = new Set([entryId]);
+  const walk = (start, next) => {
+    const stack = [start];
+    while (stack.length) {
+      const id = stack.pop();
+      next(id).forEach((n) => { if (!found.has(n)) { found.add(n); stack.push(n); } });
     }
-
-    const reportContent = reportData?.report || '';
-    const dateStr = new Date().toLocaleString();
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>GreatTest Audit Report - ${currentAgent}</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 15mm 18mm 20mm 18mm;
-              @bottom-right {
-                content: counter(page);
-                font-size: 9pt;
-                color: #888;
-              }
-            }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-              color: #111827;
-              line-height: 1.5;
-              padding: 0;
-              margin: 0;
-              font-size: 11pt;
-            }
-            .header-banner {
-              border-bottom: 3px solid #E05D38;
-              padding-bottom: 12px;
-              margin-bottom: 24px;
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-end;
-            }
-            .title {
-              font-size: 24pt;
-              font-weight: 800;
-              color: #000;
-              margin: 0;
-            }
-            .subtitle {
-              font-size: 11pt;
-              color: #4B5563;
-              margin-top: 4px;
-            }
-            .meta {
-              text-align: right;
-              font-size: 9pt;
-              color: #6B7280;
-            }
-            .kpi-grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 10px;
-              margin-bottom: 24px;
-            }
-            .kpi-card {
-              border: 1px solid #D1D5DB;
-              border-radius: 6px;
-              padding: 10px 14px;
-              background: #F9FAFB;
-            }
-            .kpi-label {
-              font-size: 8pt;
-              text-transform: uppercase;
-              font-weight: 700;
-              color: #6B7280;
-            }
-            .kpi-value {
-              font-size: 18pt;
-              font-weight: 800;
-              color: #111827;
-              margin-top: 2px;
-            }
-            h2 {
-              font-size: 14pt;
-              font-weight: 800;
-              color: #1F2937;
-              border-bottom: 1.5px solid #E5E7EB;
-              padding-bottom: 6px;
-              margin-top: 28px;
-              margin-bottom: 12px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 14px 0 24px;
-              font-size: 9.5pt;
-            }
-            th, td {
-              border: 1px solid #E5E7EB;
-              padding: 8px 10px;
-              text-align: left;
-            }
-            th {
-              background-color: #F3F4F6;
-              font-weight: 700;
-              color: #374151;
-            }
-            tr:nth-child(even) {
-              background-color: #FAFAFA;
-            }
-            .badge {
-              display: inline-block;
-              padding: 2px 7px;
-              border-radius: 4px;
-              font-weight: 700;
-              font-size: 8pt;
-              font-family: monospace;
-            }
-            .badge-verified { background: #DCFCE7; color: #166534; }
-            .badge-fail { background: #FEE2E2; color: #991B1B; }
-            .badge-rule { background: #DBEAFE; color: #1E40AF; }
-            .badge-cap { background: #F3E8FF; color: #6B21A8; }
-            .footer-note {
-              margin-top: 40px;
-              padding-top: 12px;
-              border-top: 1px dashed #D1D5DB;
-              font-size: 8.5pt;
-              color: #9CA3AF;
-              text-align: center;
-            }
-            h3, h4 { margin: 14px 0 6px; color: #111827; }
-            ul { margin: 4px 0 8px 18px; padding: 0; }
-            code { font-family: monospace; font-size: 9pt; background: #F3F4F6; padding: 1px 4px; border-radius: 3px; }
-            table { page-break-inside: auto; }
-            tr { page-break-inside: avoid; }
-            @media print {
-              .no-print { display: none !important; }
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="no-print" style="background: #111827; color: #fff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-radius: 6px;">
-            <div style="font-size: 13px; font-weight: 700;">
-              📄 Print Preview — Click the button or press Ctrl+P / Cmd+P to save as PDF
-            </div>
-            <button onclick="window.print()" style="background: #E05D38; color: #fff; border: none; padding: 8px 18px; font-weight: 700; border-radius: 4px; cursor: pointer;">
-              Print / Save as PDF
-            </button>
-          </div>
-
-          <div class="header-banner">
-            <div>
-              <h1 class="title">GreatTest Audit Report</h1>
-              <div class="subtitle">Evidence-based adaptive testing framework for conversational agents</div>
-            </div>
-            <div class="meta">
-              <strong>Agent:</strong> ${currentAgent}<br />
-              <strong>Generated:</strong> ${dateStr}<br />
-              <strong>Framework:</strong> GreatTest v0.2.1
-            </div>
-          </div>
-
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Graph Nodes</div>
-              <div class="kpi-value">${stats.nodes || nodes.length}</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Directed Edges</div>
-              <div class="kpi-value">${stats.edges || edges.length}</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Model Claims</div>
-              <div class="kpi-value">${modelEntries.length}</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Code Evidence</div>
-              <div class="kpi-value">${codeLocations.length}</div>
-            </div>
-          </div>
-
-          <h2>1. Executive Summary & Graph Metrics</h2>
-          <table>
-            <thead>
-              <tr><th>Node Classification</th><th>Quantity</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><strong>Behavioral Model Entries</strong></td><td>${modelEntries.length}</td><td>Capabilities, workflows, and constraint assertions in Model V0/V1</td></tr>
-              <tr><td><strong>Code Location Foundations</strong></td><td>${codeLocations.length}</td><td>AST-extracted function tools and line boundaries</td></tr>
-              <tr><td><strong>Phase 0 Developer Rules</strong></td><td>${developerRules.length}</td><td>Contractual constraints stated during Phase 0 specification</td></tr>
-              <tr><td><strong>Test Scenarios & Traces</strong></td><td>${testSpecs.length + traces.length}</td><td>Adversarial test cases and recorded conversation traces</td></tr>
-              <tr><td><strong>Reconciliation Findings</strong></td><td>${findings.length}</td><td>Verified passes or contradicted failure findings</td></tr>
-            </tbody>
-          </table>
-
-          <h2>2. Behavioral Claims & Traceable Evidence</h2>
-          <table>
-            <thead>
-              <tr><th>Claim ID</th><th>Type</th><th>Name</th><th>Status</th><th>Confidence</th><th>Detected By</th></tr>
-            </thead>
-            <tbody>
-              ${modelEntries.map(e => `
-                <tr>
-                  <td><code>${e.id}</code></td>
-                  <td><span class="badge badge-cap">${e.entry_type}</span></td>
-                  <td><strong>${e.name}</strong></td>
-                  <td><span class="badge ${e.status === 'confirmed' ? 'badge-verified' : (e.status === 'contradicted' || e.status === 'unreachable') ? 'badge-fail' : 'badge-rule'}">${escapeHtml(e.status)}</span></td>
-                  <td>${(e.confidence * 100).toFixed(0)}%</td>
-                  <td>${e.detected_by || 'rule'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <h2>3. Reconciliation Findings</h2>
-          ${findings.length === 0 ? '<p><em>No findings recorded for this agent yet.</em></p>' : `
-            <table>
-              <thead>
-                <tr><th>Finding ID</th><th>Target</th><th>Result</th><th>Severity</th><th>Runs failed</th><th>Model change</th><th>Description</th></tr>
-              </thead>
-              <tbody>
-                ${findings.map(f => `
-                  <tr>
-                    <td><code>${f.finding_id || f.id}</code></td>
-                    <td><code>${f.target_id || '-'}</code></td>
-                    <td><span class="badge ${f.result === 'fail' ? 'badge-fail' : 'badge-verified'}">${f.result}</span></td>
-                    <td><strong>${f.severity}</strong></td>
-                    <td>${f.reproducibility ? `${f.reproducibility.failures}/${f.reproducibility.runs}` : '-'}</td>
-                    <td>${f.status_change ? `${escapeHtml(f.status_change.from)} → ${escapeHtml(f.status_change.to)}${f.confidence_change ? ` (${Number(f.confidence_change.from).toFixed(2)} → ${Number(f.confidence_change.to).toFixed(2)})` : ''}` : '-'}</td>
-                    <td>${escapeHtml(f.description || '-')}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          `}
-
-          ${[
-            ['4. Coverage of the Behavioural Model', 'Coverage'],
-            ['5. Model Changes After Testing', 'Model Changes'],
-            ['6. Evidence Chains (finding to trace to test to model entry to code)', 'Evidence Chains'],
-            ['7. LLM Judge Assessment', 'LLM Judge'],
-            ['8. LLM Judge Score for Every Run', 'Judge Scores by Run'],
-          ].map(([title, heading]) => {
-            const body = reportSection(reportContent, heading);
-            return body ? `<h2>${title}</h2>${mdToHtml(body)}` : '';
-          }).join('')}
-
-          <div class="footer-note">
-            GreatTest Evidence Traceability Report &bull; Verified against JSON Schema Draft 2020-12
-          </div>
-
-          <script>
-            window.onload = function() {
-              setTimeout(function() { window.print(); }, 400);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
+  walk(entryId, (id) => (ix.out.get(id) || []).map((e) => e.to));
+  (ix.inn.get(entryId) || []).forEach((e) => found.add(e.from));
+  const cols = [[], [], [], [], []];
+  found.forEach((id) => { const n = ix.nodes.get(id); const k = KINDS[n.kind]; if (k) cols[k.col].push(n); });
+  cols.forEach((c) => c.sort((a, b) => (a.kind === b.kind ? titleOf(a).localeCompare(titleOf(b)) : a.kind === 'developer_rule' ? -1 : 1)));
+  return { cols, ids: found };
+}
 
-  const handleDownloadMarkdown = () => {
-    const text = reportData?.report || `# Evidence Report — ${currentAgent}\n\nNo report data available.`;
-    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `report_${currentAgent}.md`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+function layoutChain(cols, showAll) {
+  const shown = cols.map((c) => (showAll ? c : c.slice(0, COL_CAP)));
+  const hidden = cols.map((c, i) => c.length - shown[i].length);
+  const used = shown.map((c, i) => (c.length ? i : -1)).filter((i) => i >= 0);
+  const xOf = new Map(used.map((c, i) => [c, PAD + i * (NODE_W + COL_GAP)]));
+  const maxRows = Math.max(1, ...shown.map((c) => c.length));
+  const rowsH = maxRows * (NODE_H + ROW_GAP) - ROW_GAP;
+  const pos = new Map();
+  shown.forEach((c, ci) => {
+    const top = PAD + HEAD + (rowsH - (c.length * (NODE_H + ROW_GAP) - ROW_GAP)) / 2;
+    c.forEach((n, ri) => pos.set(n.id, { x: xOf.get(ci), y: top + ri * (NODE_H + ROW_GAP), col: ci }));
+  });
+  return {
+    shown, hidden, pos, xOf, used,
+    width: PAD * 2 + used.length * NODE_W + Math.max(0, used.length - 1) * COL_GAP,
+    height: PAD * 2 + HEAD + rowsH + (hidden.some(Boolean) ? 30 : 0)
   };
+}
 
+function curve(a, b) {
+  const x1 = a.x + NODE_W; const y1 = a.y + NODE_H / 2; const x2 = b.x; const y2 = b.y + NODE_H / 2;
+  const k = Math.max(36, (x2 - x1) / 2);
+  return `M${x1},${y1} C${x1 + k},${y1} ${x2 - k},${y2} ${x2},${y2}`;
+}
+
+function Tile({ label, value, tone }) {
   return (
-    <div className="animate-fade-in" style={{ maxWidth: '1360px', margin: '16px auto 80px', padding: '0 24px' }}>
-      {/* Top Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '22px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: 'var(--accent)',
-            fontSize: '11px',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: '0.8px',
-            marginBottom: '6px'
-          }}>
-            <span>✦</span> Phase 3: Evidence Graph & Audit Trail
-          </div>
-          <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.6px', margin: 0 }}>
-            Evidence Traceability Graph
-          </h1>
-          <p style={{ color: 'var(--ink-secondary)', fontSize: '14.5px', marginTop: '4px', maxWidth: '780px' }}>
-            Interactive visual flow connecting source code AST foundations and Phase 0 specs to Behavioral Model claims and runtime findings.
-          </p>
-        </div>
+    <div className="cg-stat">
+      <div className="k">{label}</div>
+      <div className="v" style={tone ? { color: tone } : undefined}>{value}</div>
+    </div>
+  );
+}
 
-        {/* Action Button: Download as PDF only */}
-        <div>
-          <button
-            onClick={handleDownloadPDF}
-            style={{
-              background: '#000000',
-              color: '#FFFFFF',
-              border: 'none',
-              padding: '10px 22px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.16)',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <line x1="9" y1="15" x2="15" y2="15" />
-            </svg>
-            <span>Download as PDF</span>
-          </button>
-        </div>
+function Overview({ ix, onOpen }) {
+  const kindCount = (k) => [...ix.nodes.values()].filter((n) => n.kind === k).length;
+  const byStatus = STATUS_ORDER.map((s) => [s, ix.entries.filter((e) => (e.status || 'unverified') === s).length]);
+  const total = ix.entries.length || 1;
+  const sorted = [...ix.findings].sort((a, b) => (a.result === 'fail' ? -1 : 1) - (b.result === 'fail' ? -1 : 1));
+  return (
+    <div className="ev-over">
+      <div className="ev-funnel">
+        {[['code_location', 'Code locations'], ['developer_rule', 'Your rules'], ['model_entry', 'Model entries'], ['test_spec', 'Tests'], ['trace', 'Conversations'], ['finding', 'Findings']].map(([k, label], i, arr) => (
+          <React.Fragment key={k}>
+            <div className="ev-step"><div className="n" style={{ color: KINDS[k].color }}>{kindCount(k)}</div><div className="l">{label}</div></div>
+            {i < arr.length - 1 && <div className="ev-arrow">→</div>}
+          </React.Fragment>
+        ))}
       </div>
 
-      {/* KPI Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '14px',
-        marginBottom: '22px'
-      }}>
-        <div style={{ background: '#fff', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Total Nodes</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '24px', fontWeight: 800, color: 'var(--ink-primary)', marginTop: '2px' }}>
-            {stats.nodes || nodes.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>{stats.edges || edges.length} directed edges</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Code Evidence</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '24px', fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
-            {codeLocations.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>AST source lines</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Model Claims</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '24px', fontWeight: 800, color: 'var(--accent)', marginTop: '2px' }}>
-            {modelEntries.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>Caps, Wfs & Constraints</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Phase 0 Rules</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '24px', fontWeight: 800, color: '#3B82F6', marginTop: '2px' }}>
-            {developerRules.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>Developer contracts</div>
-        </div>
-
-        <div style={{ background: '#fff', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1.5px solid var(--border-default)', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Test Findings</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '24px', fontWeight: 800, color: findings.length > 0 ? '#DC2626' : '#6B7280', marginTop: '2px' }}>
-            {findings.length}
-          </div>
-          <div style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>Runtime verdicts</div>
-        </div>
+      <div className="gt-glass ev-card">
+        <div className="ev-h">How much of the model is backed by evidence</div>
+        <div className="ev-split">{byStatus.map(([s, n]) => n > 0 && <i key={s} style={{ width: `${(n / total) * 100}%`, background: STATUS[s].color }} title={`${STATUS[s].label}: ${n}`} />)}</div>
+        <div className="ev-legend">{byStatus.map(([s, n]) => <span key={s}><i style={{ background: STATUS[s].color }} />{STATUS[s].label} <b>{n}</b></span>)}</div>
+        {ix.findings.length === 0 && <p className="ev-note">No tests have run yet, so every entry is still based on code and your rules only.</p>}
       </div>
 
-      {/* Main Tabs Navigation */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1.5px solid var(--border-default)',
-        marginBottom: '20px',
-        gap: '12px',
-        flexWrap: 'wrap'
-      }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {[
-            { id: 'visual', label: '✦ Visual Graph Canvas' },
-            { id: 'chains', label: 'Traceability Flow Cards' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                padding: '10px 16px',
-                fontSize: '13.5px',
-                fontWeight: activeTab === tab.id ? 800 : 600,
-                color: activeTab === tab.id ? 'var(--accent)' : 'var(--ink-secondary)',
-                borderBottom: activeTab === tab.id ? '2.5px solid var(--accent)' : '2.5px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Filter Chips for Visual & Chain views */}
-        {(activeTab === 'visual' || activeTab === 'chains') && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Filter:</span>
-            {['ALL', 'CAPABILITY', 'CONSTRAINT', 'WORKFLOW'].map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                style={{
-                  border: filterType === type ? '1.5px solid var(--accent)' : '1px solid var(--border-default)',
-                  background: filterType === type ? 'var(--accent-light)' : '#fff',
-                  color: filterType === type ? 'var(--accent)' : 'var(--ink-secondary)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '3px 10px',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: 'pointer'
-                }}
-              >
-                {type}
+      {sorted.length > 0 && (
+        <div className="gt-glass ev-card">
+          <div className="ev-h">Findings <span>{ix.findings.length}</span></div>
+          <div className="ev-findings">
+            {sorted.map((f) => (
+              <button type="button" key={f.id} className="ev-find" onClick={() => onOpen(ix.entryOfFinding.get(f.id), f.id)}>
+                <span className="res" style={{ background: f.result === 'pass' ? 'var(--gt-ok)' : 'var(--gt-bad)' }}>{f.result === 'pass' ? '✓' : '✕'}</span>
+                <span className="body">
+                  <b>{f.finding_id}{f.severity ? <em> · {f.severity}</em> : null}</b>
+                  <span>{clip(f.description, 170)}</span>
+                  {f.status_change && <span className="chg">{f.status_change.from} → <b>{f.status_change.to}</b>{f.confidence_change ? ` · confidence ${pct(f.confidence_change.from)} → ${pct(f.confidence_change.to)}` : ''}</span>}
+                </span>
+                <span className="go">See chain →</span>
               </button>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Explorer({ ix, startEntry, startNode }) {
+  const [entryId, setEntryId] = useState(startEntry);
+  const [selected, setSelected] = useState(startNode || startEntry);
+  const [hover, setHover] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  const types = useMemo(() => ['all', ...new Set(ix.entries.map((e) => e.entry_type))], [ix]);
+  const list = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return ix.entries
+      .filter((e) => (filter === 'all' || (e.status || 'unverified') === filter) && (typeFilter === 'all' || e.entry_type === typeFilter) && (!q || (e.name || '').toLowerCase().includes(q)))
+      .sort((a, b) => STATUS_ORDER.indexOf(a.status || 'unverified') - STATUS_ORDER.indexOf(b.status || 'unverified') || (a.confidence ?? 0) - (b.confidence ?? 0));
+  }, [ix, filter, typeFilter, search]);
+
+  const chain = useMemo(() => chainOf(ix, entryId), [ix, entryId]);
+  const lay = useMemo(() => layoutChain(chain.cols, showAll), [chain, showAll]);
+  const edges = useMemo(() => {
+    const list2 = [];
+    chain.ids.forEach((from) => (ix.out.get(from) || []).forEach((e) => {
+      if (lay.pos.has(from) && lay.pos.has(e.to)) list2.push({ from, to: e.to, relation: e.relation });
+    }));
+    return list2;
+  }, [chain, ix, lay]);
+
+  const entry = ix.nodes.get(entryId);
+  const active = hover || selected;
+  const near = new Set(active ? [active] : []);
+  if (active) { (ix.out.get(active) || []).forEach((e) => near.add(e.to)); (ix.inn.get(active) || []).forEach((e) => near.add(e.from)); }
+  const sel = ix.nodes.get(selected);
+  const hiddenTotal = lay.hidden.reduce((a, b) => a + b, 0);
+  const tested = chain.cols[2].length > 0;
+
+  const pickEntry = (id) => { setEntryId(id); setSelected(id); setShowAll(false); };
+
+  return (
+    <div className="cg-layout">
+      <aside className="gt-glass cg-side">
+        <input className="gt-field" style={{ padding: '10px 14px', fontSize: '13.5px', marginBottom: '10px' }} type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search model entries…" />
+        <div className="gt-pills" style={{ marginBottom: '8px' }}>
+          {['all', ...STATUS_ORDER].map((s) => <button type="button" key={s} className={`gt-pill${filter === s ? ' on' : ''}`} style={{ padding: '5px 11px', fontSize: '11.5px' }} onClick={() => setFilter(s)}>{s === 'all' ? 'All' : STATUS[s].label}</button>)}
+        </div>
+        {types.length > 2 && (
+          <div className="gt-pills" style={{ marginBottom: '10px' }}>
+            {types.map((t) => <button type="button" key={t} className={`gt-pill${typeFilter === t ? ' on' : ''}`} style={{ padding: '5px 11px', fontSize: '11.5px' }} onClick={() => setTypeFilter(t)}>{t === 'all' ? 'Any type' : t}</button>)}
+          </div>
         )}
+        <div className="cg-sub">{list.length} {list.length === 1 ? 'entry' : 'entries'}</div>
+        <div className="cg-list">
+          {list.map((e) => (
+            <button type="button" key={e.id} className={`cg-item${entryId === e.id ? ' on' : ''}`} onClick={() => pickEntry(e.id)}>
+              <b><i style={{ background: stat(e.status).color }} />{clip(e.name, 30)}</b>
+              <span>{e.entry_type} · {pct(e.confidence)}</span>
+            </button>
+          ))}
+          {list.length === 0 && <div className="cg-sub">Nothing matches.</div>}
+        </div>
+      </aside>
+
+      <section className="cg-main">
+        <div className="gt-glass cg-toolbar">
+          <div className="ttl">
+            Evidence for <code>{entry?.name}</code>
+            <span> · <i className="ev-dot" style={{ background: stat(entry?.status).color }} />{stat(entry?.status).label} · {pct(entry?.confidence)} sure</span>
+          </div>
+          {hiddenTotal > 0 && <button type="button" className="gt-link-btn" onClick={() => setShowAll((v) => !v)}>{showAll ? 'Show fewer' : `Show ${hiddenTotal} hidden`}</button>}
+        </div>
+
+        {!tested && <div className="gt-banner" style={{ marginTop: 0, marginBottom: '12px' }}><span>This entry has not been tested yet. Its evidence is the code and rules on the left only.</span></div>}
+
+        <GraphViewport zoom={zoom} setZoom={setZoom} contentWidth={lay.width} contentHeight={lay.height}>
+          <svg width={lay.width * zoom} height={lay.height * zoom} viewBox={`0 0 ${lay.width} ${lay.height}`} role="img" aria-label="Evidence chain">
+            <defs>
+              <marker id="evArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6f7fb3" /></marker>
+              <marker id="evArrowHot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--gt-accent-text)" /></marker>
+            </defs>
+            {lay.used.map((c) => <text key={`h${c}`} x={lay.xOf.get(c)} y={PAD + 8} className="ev-colhead">{COL_TITLES[c].toUpperCase()}</text>)}
+            {edges.map((e) => {
+              const hot = active && (e.from === active || e.to === active);
+              const dim = active && !hot;
+              return (
+                <path key={`${e.from}>${e.to}`} d={curve(lay.pos.get(e.from), lay.pos.get(e.to))} fill="none" markerEnd={hot ? 'url(#evArrowHot)' : 'url(#evArrow)'}
+                  className={`cg-edge${hot ? ' hot' : ''}${dim ? ' dim' : ''}${e.relation === 'has_finding' ? ' back' : ''}`}>
+                  <title>{e.relation.replace('_', ' ')}</title>
+                </path>
+              );
+            })}
+            {lay.shown.flat().map((n) => {
+              const p = lay.pos.get(n.id);
+              const color = accentOf(n);
+              const dim = active && !near.has(n.id);
+              return (
+                <g key={n.id} transform={`translate(${p.x},${p.y})`} className={`cg-node${n.id === selected ? ' sel' : ''}${dim ? ' dim' : ''}`}
+                  onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)} onClick={() => setSelected(n.id)}>
+                  <title>{titleOf(n)}</title>
+                  <rect width={NODE_W} height={NODE_H} rx="14" className="body" style={n.id === selected ? { stroke: color } : undefined} />
+                  <rect width="6" height={NODE_H} rx="3" style={{ fill: color }} />
+                  <text x="20" y="22" className="nm">{clip(titleOf(n), 26)}</text>
+                  <text x="20" y="40" className="fl">{clip(subOf(n), 33)}</text>
+                  <text x={NODE_W - 12} y="22" textAnchor="end" className="tag" style={{ fill: color }}>{KINDS[n.kind].label.toUpperCase()}</text>
+                </g>
+              );
+            })}
+            {lay.hidden.map((c, ci) => (c && !showAll ? (
+              <g key={`m${ci}`} transform={`translate(${lay.xOf.get(ci)},${lay.height - 34})`} className="cg-more" onClick={() => setShowAll(true)}>
+                <rect width={NODE_W} height="24" rx="12" /><text x={NODE_W / 2} y="16" textAnchor="middle">+{c} more</text>
+              </g>
+            ) : null))}
+          </svg>
+        </GraphViewport>
+        <div className="cg-foot"><div className="cg-hint">Hover to trace a path · click a box for details · pinch to zoom · dashed line: the entry's direct link to a finding</div></div>
+      </section>
+
+      <aside className="gt-glass cg-detail">
+        {sel && (
+          <>
+            <div className="cg-dh">
+              <span className="gt-badge" style={{ color: accentOf(sel) }}>{KINDS[sel.kind].label}</span>
+              <h3>{titleOf(sel)}</h3>
+            </div>
+            {sel.kind === 'model_entry' && (
+              <div className="cg-sec"><div className="h">Status</div>
+                <div className="gt-chips"><span className="gt-chip">{stat(sel.status).label}</span><span className="gt-chip">{pct(sel.confidence)} sure</span><span className="gt-chip">{sel.entry_type}</span>{sel.detected_by && <span className="gt-chip">found by {sel.detected_by}</span>}</div>
+              </div>
+            )}
+            {sel.kind === 'finding' && (
+              <>
+                <p className="doc">{sel.description}</p>
+                {sel.status_change && <div className="cg-sec"><div className="h">What changed</div><div className="gt-chips"><span className="gt-chip">{sel.status_change.from} → {sel.status_change.to}</span>{sel.confidence_change && <span className="gt-chip">{pct(sel.confidence_change.from)} → {pct(sel.confidence_change.to)}</span>}</div></div>}
+              </>
+            )}
+            {sel.kind === 'code_location' && <div className="cg-sec"><div className="h">Location</div><code>{sel.file}:{sel.lines}</code>{sel.pattern && <div className="none" style={{ marginTop: '6px' }}>Found by pattern {sel.pattern}</div>}</div>}
+            {sel.kind === 'developer_rule' && <p className="doc">{sel.description}</p>}
+            {(sel.kind === 'test_spec' || sel.kind === 'trace') && <p className="doc">{sel.kind === 'test_spec' ? 'A generated test scenario aimed at this entry.' : 'The raw conversation recorded when the test ran.'}</p>}
+            <div className="cg-sec">
+              <div className="h">Connected to <b>{((ix.out.get(sel.id) || []).length + (ix.inn.get(sel.id) || []).length)}</b></div>
+              {[...(ix.inn.get(sel.id) || []).map((e) => ({ id: e.from, rel: e.relation, dir: 'from' })), ...(ix.out.get(sel.id) || []).map((e) => ({ id: e.to, rel: e.relation, dir: 'to' }))].slice(0, 14).map((c) => {
+                const n = ix.nodes.get(c.id);
+                return <button type="button" key={`${c.dir}${c.id}`} className="cg-link" onClick={() => { if (n.kind === 'model_entry') pickEntry(n.id); else setSelected(n.id); }}>{clip(titleOf(n), 30)}<span>{c.dir === 'from' ? `${c.rel} →` : `→ ${c.rel}`}</span></button>;
+              })}
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+export function EvidenceGraphView({ evidenceData, reportData, currentAgent }) {
+  const ix = useMemo(() => buildIndex(evidenceData || {}), [evidenceData]);
+  const [tab, setTab] = useState('overview');
+  const [focus, setFocus] = useState(null); // { entry, node }
+
+  if (!evidenceData || ix.nodes.size === 0) {
+    return (
+      <div className="cg"><div className="gt-glass cg-empty">
+        <h3>No evidence graph available</h3>
+        <p>The evidence graph is built by the last stage of the run.</p>
+      </div></div>
+    );
+  }
+
+  const stats = evidenceData.stats || {};
+  const firstEntry = (ix.findings.find((f) => f.result !== 'pass') && ix.entryOfFinding.get(ix.findings.find((f) => f.result !== 'pass').id))
+    || [...ix.entries].sort((a, b) => STATUS_ORDER.indexOf(a.status || 'unverified') - STATUS_ORDER.indexOf(b.status || 'unverified'))[0]?.id;
+  const open = (entry, node) => { setFocus({ entry: entry || firstEntry, node }); setTab('chain'); };
+  const fails = ix.findings.filter((f) => f.result !== 'pass').length;
+
+  return (
+    <div className="cg animate-fade-in">
+      <div className="cg-head">
+        <div>
+          <div className="gt-eyebrow"><i /> Evidence graph</div>
+          <h1>Why we believe what we report</h1>
+          <p>Every conclusion links back to the test that produced it and the code or rule that justified the claim.</p>
+        </div>
+        <div className="cg-stats">
+          <Tile label="Model entries" value={ix.entries.length} />
+          <Tile label="Tests" value={[...ix.nodes.values()].filter((n) => n.kind === 'test_spec').length} />
+          <Tile label="Findings" value={ix.findings.length} />
+          <Tile label="Failed" value={fails} tone={fails ? 'var(--gt-bad)' : 'var(--gt-ok)'} />
+        </div>
       </div>
 
-      {/* ============================================================== */}
-      {/* TAB 1: INTERACTIVE SVG VISUAL GRAPH CANVAS                       */}
-      {/* ============================================================== */}
-      {activeTab === 'visual' && (
-        <div style={{
-          background: '#fff',
-          borderRadius: 'var(--radius-lg)',
-          border: '1.5px solid var(--border-default)',
-          boxShadow: 'var(--shadow-card)',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          {/* Canvas Toolbar & Legend */}
-          <div style={{
-            padding: '12px 20px',
-            background: 'var(--bg-surface-soft)',
-            borderBottom: '1px solid var(--border-default)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}>
-            {/* Column Labels */}
-            <div style={{ display: 'flex', gap: '24px', fontSize: '11.5px', fontWeight: 800 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#10B981' }} />
-                <span style={{ color: 'var(--ink-primary)' }}>1. Evidence Sources</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#E05D38' }} />
-                <span style={{ color: 'var(--ink-primary)' }}>2. Model Claims</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#F59E0B' }} />
-                <span style={{ color: 'var(--ink-primary)' }}>3. Tests & Traces</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#DC2626' }} />
-                <span style={{ color: 'var(--ink-primary)' }}>4. Reconciliation Findings</span>
-              </div>
-            </div>
+      <div className="cg-tabs ev-tabs">
+        {[['overview', 'Overview'], ['chain', 'Evidence chains'], ['report', 'Report & export']].map(([id, label]) => (
+          <button type="button" key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
+        ))}
+        <span className="ev-built">{stats.nodes ?? ix.nodes.size} nodes · {stats.edges ?? (evidenceData.edges || []).length} links</span>
+      </div>
 
-            {/* Canvas Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--ink-muted)' }}>Zoom: {(zoomLevel * 100).toFixed(0)}%</span>
-              <button
-                onClick={() => setZoomLevel(prev => Math.min(1.5, prev + 0.1))}
-                style={{ background: '#fff', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
-              >
-                +
-              </button>
-              <button
-                onClick={() => setZoomLevel(prev => Math.max(0.6, prev - 0.1))}
-                style={{ background: '#fff', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
-              >
-                -
-              </button>
-              <button
-                onClick={() => setZoomLevel(1)}
-                style={{ background: '#fff', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                Reset
-              </button>
-              {selectedNodeId && (
-                <button
-                  onClick={() => setSelectedNodeId(null)}
-                  style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: 'var(--ink-secondary)', cursor: 'pointer' }}
-                >
-                  Clear Selection
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* SVG Canvas Area with horizontal scrolling */}
-          <div style={{
-            overflowX: 'auto',
-            overflowY: 'auto',
-            maxHeight: '720px',
-            background: '#F8FAFC',
-            position: 'relative',
-            padding: '24px'
-          }}>
-            <svg
-              ref={svgRef}
-              width={layout.canvasWidth * zoomLevel}
-              height={layout.canvasHeight * zoomLevel}
-              viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
-              style={{ display: 'block', margin: '0 auto', transition: 'width 0.1s ease, height 0.1s ease' }}
-            >
-              <defs>
-                {/* Background dot grid pattern */}
-                <pattern id="ev-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-                  <circle cx="12" cy="12" r="1" fill="#E2E8F0" />
-                </pattern>
-
-                {/* Arrowhead marker - Normal */}
-                <marker id="ev-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94A3B8" />
-                </marker>
-
-                {/* Arrowhead marker - Highlighted */}
-                <marker id="ev-arrow-active" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#E05D38" />
-                </marker>
-
-                {/* Drop shadow filter */}
-                <filter id="node-shadow" x="-5%" y="-10%" width="110%" height="125%">
-                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.06" />
-                </filter>
-                <filter id="node-glow" x="-10%" y="-15%" width="120%" height="135%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#E05D38" floodOpacity="0.45" />
-                </filter>
-              </defs>
-
-              <rect width={layout.canvasWidth} height={layout.canvasHeight} fill="#F8FAFC" />
-              <rect width={layout.canvasWidth} height={layout.canvasHeight} fill="url(#ev-grid)" />
-
-              {/* Column Guides */}
-              {layout.colX.map((x, idx) => (
-                <line
-                  key={idx}
-                  x1={x + layout.nodeWidth / 2}
-                  y1={20}
-                  x2={x + layout.nodeWidth / 2}
-                  y2={layout.canvasHeight - 20}
-                  stroke="#E2E8F0"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 6"
-                />
-              ))}
-
-              {/* EDGES: Bezier Curves */}
-              {edges.map((edge, eIdx) => {
-                const src = layout.positions.get(edge.from);
-                const dst = layout.positions.get(edge.to);
-                if (!src || !dst) return null;
-
-                const startX = src.x + src.width;
-                const startY = src.y + src.height / 2;
-                const endX = dst.x;
-                const endY = dst.y + dst.height / 2;
-
-                const dx = Math.max(50, (endX - startX) * 0.45);
-                const pathD = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
-
-                const isEdgeActive = activeFocusId && (
-                  (edge.from === activeFocusId || edge.to === activeFocusId) ||
-                  (connectedIds.has(edge.from) && connectedIds.has(edge.to))
-                );
-
-                const isDimmed = activeFocusId && !isEdgeActive;
-
-                return (
-                  <g key={`edge-${eIdx}`} opacity={isDimmed ? 0.15 : 1} style={{ transition: 'opacity 0.2s ease' }}>
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={isEdgeActive ? '#E05D38' : '#94A3B8'}
-                      strokeWidth={isEdgeActive ? 2.5 : 1.5}
-                      markerEnd={isEdgeActive ? 'url(#ev-arrow-active)' : 'url(#ev-arrow)'}
-                    />
-                    {/* Relation text on middle of curve */}
-                    <text
-                      x={(startX + endX) / 2}
-                      y={(startY + endY) / 2 - 6}
-                      textAnchor="middle"
-                      fill={isEdgeActive ? '#E05D38' : '#64748B'}
-                      fontSize="9.5"
-                      fontFamily="monospace"
-                      fontWeight="700"
-                    >
-                      {edge.relation}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* NODES: Rich Interactive SVG Cards */}
-              {Array.from(layout.positions.values()).map(({ x, y, width, height, node }) => {
-                const isSelected = selectedNodeId === node.id;
-                const isHovered = hoveredNodeId === node.id;
-                const isConnected = activeFocusId && connectedIds.has(node.id);
-                const isDimmed = activeFocusId && !isConnected;
-
-                // Color accent by kind
-                let accentColor = '#64748B';
-                let headerBg = '#F1F5F9';
-                let iconText = 'N';
-
-                if (node.kind === 'code_location') {
-                  accentColor = '#10B981';
-                  headerBg = '#ECFDF5';
-                  iconText = 'C';
-                } else if (node.kind === 'developer_rule') {
-                  accentColor = '#3B82F6';
-                  headerBg = '#EFF6FF';
-                  iconText = 'R';
-                } else if (node.kind === 'model_entry') {
-                  accentColor = node.entry_type === 'constraint' ? '#E05D38' : '#8B5CF6';
-                  headerBg = node.entry_type === 'constraint' ? '#FCEFEA' : '#F5F3FF';
-                  iconText = node.entry_type === 'constraint' ? '!' : 'M';
-                } else if (node.kind === 'finding') {
-                  accentColor = node.result === 'fail' ? '#DC2626' : '#16A34A';
-                  headerBg = node.result === 'fail' ? '#FEE2E2' : '#DCFCE7';
-                  iconText = node.result === 'fail' ? '✕' : '✓';
-                }
-
-                const displayName = node.name || (node.file ? `${node.file}:${node.lines}` : (node.description || node.id));
-
-                return (
-                  <g
-                    key={node.id}
-                    transform={`translate(${x}, ${y})`}
-                    opacity={isDimmed ? 0.25 : 1}
-                    style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
-                    onClick={() => setSelectedNodeId(node.id === selectedNodeId ? null : node.id)}
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
-                  >
-                    {/* Node Background Box */}
-                    <rect
-                      width={width}
-                      height={height}
-                      rx={8}
-                      fill="#FFFFFF"
-                      stroke={isSelected ? '#E05D38' : (isHovered ? accentColor : '#CBD5E1')}
-                      strokeWidth={isSelected ? 2.5 : 1.5}
-                      filter={isSelected ? 'url(#node-glow)' : 'url(#node-shadow)'}
-                    />
-
-                    {/* Left Accent Color Strip */}
-                    <rect
-                      x={0}
-                      y={0}
-                      width={5}
-                      height={height}
-                      rx={2}
-                      fill={accentColor}
-                    />
-
-                    {/* Node Kind Badge Circle */}
-                    <rect
-                      x={12}
-                      y={10}
-                      width={18}
-                      height={18}
-                      rx={4}
-                      fill={headerBg}
-                      stroke={accentColor}
-                      strokeWidth={1}
-                    />
-                    <text
-                      x={21}
-                      y={23}
-                      textAnchor="middle"
-                      fill={accentColor}
-                      fontSize="10"
-                      fontWeight="800"
-                    >
-                      {iconText}
-                    </text>
-
-                    {/* Node ID */}
-                    <text
-                      x={36}
-                      y={23}
-                      fill="#0F172A"
-                      fontSize="11.5"
-                      fontFamily="monospace"
-                      fontWeight="800"
-                    >
-                      {node.id.length > 24 ? node.id.slice(0, 22) + '..' : node.id}
-                    </text>
-
-                    {/* Node Label / Name */}
-                    <text
-                      x={14}
-                      y={46}
-                      fill="#334155"
-                      fontSize="11"
-                      fontWeight="600"
-                    >
-                      {displayName.length > 32 ? displayName.slice(0, 30) + '...' : displayName}
-                    </text>
-
-                    {/* Confidence or Status badge if model_entry */}
-                    {node.kind === 'model_entry' && (
-                      <g transform={`translate(${width - 65}, 10)`}>
-                        <rect width={55} height={16} rx={3} fill={node.status === 'confirmed' ? '#DCFCE7' : '#F1F5F9'} />
-                        <text x={27} y={12} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#475569">
-                          {(node.confidence * 100).toFixed(0)}% conf
-                        </text>
-                      </g>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-
-          {/* Node Inspector Bottom Drawer / Card */}
-          {selectedNodeObj && (
-            <div style={{
-              padding: '16px 24px',
-              background: '#FFFFFF',
-              borderTop: '1.5px solid var(--border-default)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '14px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: 'var(--accent-light)',
-                  color: 'var(--accent)',
-                  fontWeight: 800,
-                  fontSize: '11px',
-                  textTransform: 'uppercase'
-                }}>
-                  {selectedNodeObj.kind}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                  {selectedNodeObj.id}
-                </span>
-                <span style={{ fontSize: '13px', color: 'var(--ink-secondary)' }}>
-                  {selectedNodeObj.name || selectedNodeObj.description || selectedNodeObj.file}
-                </span>
-                {selectedNodeObj.confidence !== undefined && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--ink-muted)', background: 'var(--bg-inset)', padding: '2px 6px', borderRadius: '4px' }}>
-                    Confidence: {(selectedNodeObj.confidence * 100).toFixed(0)}%
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '11.5px', color: 'var(--ink-muted)' }}>
-                  Connected to {connectedIds.size - 1} node(s) in evidence chain
-                </span>
-                <button
-                  onClick={() => setSelectedNodeId(null)}
-                  style={{
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border-default)',
-                    padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '11.5px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
+      {tab === 'overview' && <Overview ix={ix} onOpen={open} />}
+      {tab === 'chain' && <Explorer key={`${focus?.entry || firstEntry}`} ix={ix} startEntry={focus?.entry || firstEntry} startNode={focus?.node} />}
+      {tab === 'report' && (
+        <div className="legacy-canvas gt-out-sheet" style={{ marginTop: '4px' }}>
+          <EvidenceGraphLegacy evidenceData={evidenceData} reportData={reportData} currentAgent={currentAgent} initialTab="report" />
         </div>
       )}
-
-      {/* ============================================================== */}
-      {/* TAB 2: TRACEABILITY FLOW CARDS                                  */}
-      {/* ============================================================== */}
-      {activeTab === 'chains' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {modelEntries.map(entry => {
-            const upstream = edges.filter(e => e.to === entry.id).map(e => ({ node: nodeMap.get(e.from), rel: e.relation })).filter(x => x.node);
-            const downstreamFindings = edges.filter(e => e.from === entry.id && e.relation === 'has_finding').map(e => nodeMap.get(e.to)).filter(Boolean);
-
-            return (
-              <div
-                key={entry.id}
-                style={{
-                  background: '#fff',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1.5px solid var(--border-default)',
-                  padding: '20px',
-                  boxShadow: 'var(--shadow-card)'
-                }}
-              >
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, background: 'var(--bg-inset)', padding: '3px 8px', borderRadius: '6px' }}>
-                      {entry.id}
-                    </span>
-                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '4px' }}>
-                      {entry.entry_type}
-                    </span>
-                    <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                      {entry.name}
-                    </span>
-                  </div>
-
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: 'var(--ink-secondary)' }}>
-                    Confidence: {(entry.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-
-                {/* 3-Column Visual Chain Flow */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center', gap: '14px', background: 'var(--bg-surface-soft)', padding: '16px', borderRadius: '8px' }}>
-                  {/* Left: Foundation */}
-                  <div>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      1. Evidence Foundation
-                    </div>
-                    {upstream.length === 0 ? (
-                      <div style={{ fontSize: '12px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>No static source node linked</div>
-                    ) : (
-                      upstream.map(({ node, rel }, i) => (
-                        <div key={i} style={{ background: '#fff', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-default)', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '9.5px', fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase' }}>{rel}</span>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700, marginTop: '2px' }}>
-                            {node.file ? `${node.file}:${node.lines}` : (node.description || node.id)}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div style={{ fontSize: '18px', color: 'var(--ink-muted)' }}>→</div>
-
-                  {/* Center: Claim */}
-                  <div style={{ background: '#fff', padding: '12px', borderRadius: '8px', border: '1.5px solid var(--border-default)' }}>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--ink-muted)', textTransform: 'uppercase' }}>2. Verified Claim</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)', marginTop: '2px' }}>
-                      {entry.id}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--ink-secondary)', marginTop: '2px' }}>Status: <strong>{entry.status}</strong></div>
-                  </div>
-
-                  <div style={{ fontSize: '18px', color: 'var(--ink-muted)' }}>→</div>
-
-                  {/* Right: Finding Verdict */}
-                  <div>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      3. Test Verdict
-                    </div>
-                    {downstreamFindings.length === 0 ? (
-                      <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px dashed var(--border-default)', fontSize: '11.5px', color: 'var(--ink-muted)', fontStyle: 'italic' }}>
-                        Unchallenged (No findings)
-                      </div>
-                    ) : (
-                      downstreamFindings.map((f, i) => (
-                        <div key={i} style={{ background: f.result === 'fail' ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${f.result === 'fail' ? '#FCA5A5' : '#86EFAC'}`, padding: '8px', borderRadius: '6px' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, color: f.result === 'fail' ? '#DC2626' : '#16A34A' }}>
-                            {f.finding_id || f.id} [{f.result}]
-                          </span>
-                          <div style={{ fontSize: '11px', color: 'var(--ink-secondary)', marginTop: '2px' }}>{f.description}</div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
     </div>
   );
 }

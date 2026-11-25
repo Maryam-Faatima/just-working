@@ -1,4 +1,6 @@
 import React from 'react';
+import { Logo } from './Logo';
+import { useTheme } from '../theme';
 
 export function Header({
   activeScreenIndex,
@@ -8,243 +10,69 @@ export function Header({
   currentAgent,
   onNewAnalysis,
   currentView = 'analysis',
-  onHomeClick
+  onHomeClick,
+  onAgentClick
 }) {
+  const [theme, setTheme] = useTheme();
   const currentScreen = screens[activeScreenIndex] || screens[0];
   const canGoPrev = activeScreenIndex > 0;
   const canGoNext = activeScreenIndex < screens.length - 1;
 
   return (
-    <header style={{
-      position: 'sticky',
-      top: '14px',
-      zIndex: 50,
-      width: '100%',
-      padding: '0 20px',
-      pointerEvents: 'none',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '8px'
-    }}>
-      {/* Clean Dynamic Island Container */}
-      <div className="island-container" style={{
-        maxWidth: '1100px',
-        width: '100%',
-        margin: '0 auto',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(16px)',
-        border: '1.5px solid var(--border-island)',
-        borderRadius: 'var(--radius-full)',
-        padding: '7px 20px',
-        boxShadow: 'var(--shadow-island)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-        pointerEvents: 'auto',
-        transition: 'all 0.2s ease'
-      }}>
-        {/* Left: Brand & Target Indicator */}
+    <header className="gt-header">
+      <div className="gt-island island-container">
+        {/* Left: brand + current agent */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <img
-            src="/logo.png"
-            alt="GreatTest Logo"
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              objectFit: 'contain',
-              display: 'block',
-              cursor: onHomeClick ? 'pointer' : 'default'
-            }}
-            onClick={onHomeClick}
-          />
-          <div
-            onClick={onHomeClick}
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '16.5px',
-              fontWeight: 800,
-              letterSpacing: '-0.3px',
-              color: 'var(--ink-primary)',
-              cursor: onHomeClick ? 'pointer' : 'default',
-              userSelect: 'none'
-            }}
-          >
-            GreatTest<span style={{ color: 'var(--accent)' }}>.</span>
+          <div className="gt-brand" onClick={onHomeClick}>
+            <Logo size={36} />
+            <div className="gt-brand-name">GreatTest<span>.</span></div>
           </div>
-
           {currentAgent && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'var(--bg-inset)',
-              padding: '3px 10px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--border-subtle)'
-            }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-confirmed)' }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-primary)' }}>
-                {currentAgent}
-              </span>
-            </div>
+            <div className="gt-agent-pill" onClick={onAgentClick} style={onAgentClick ? { cursor: 'pointer' } : undefined}
+              title={onAgentClick ? 'Back to the live run' : undefined}><i />{currentAgent}</div>
           )}
         </div>
 
-        {/* Center: Stage Carousel or Mode Display */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Center: stage carousel or mode label */}
+        <div className="gt-center">
           {currentView === 'analysis' ? (
             <>
-              <button
-                onClick={onNavigatePrev}
-                disabled={!canGoPrev}
-                style={{
-                  border: '1px solid var(--border-default)',
-                  background: canGoPrev ? '#fff' : 'var(--bg-inset)',
-                  color: canGoPrev ? 'var(--ink-primary)' : 'var(--ink-faint)',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: canGoPrev ? 'pointer' : 'not-allowed',
-                  fontWeight: 800,
-                  fontSize: '14px',
-                  transition: 'all 0.15s ease'
-                }}
-                title="Previous Stage"
-              >
-                ←
-              </button>
-
-              <div style={{
-                background: 'var(--bg-inset)',
-                padding: '5px 16px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--border-subtle)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                minWidth: '220px',
-                justifyContent: 'center'
-              }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  color: 'var(--accent)',
-                  background: '#fff',
-                  padding: '2px 6px',
-                  borderRadius: '4px'
-                }}>
-                  Phase {activeScreenIndex + 1}/{screens.length}
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                  {currentScreen.label}
-                </span>
+              <button className="gt-icon-btn" onClick={onNavigatePrev} disabled={!canGoPrev} title="Previous stage">←</button>
+              <div className="gt-stage-pill">
+                <span className="gt-stage-tag">Phase {activeScreenIndex + 1}/{screens.length}</span>
+                <span className="gt-stage-label">{currentScreen.label}</span>
               </div>
-
-              <button
-                onClick={onNavigateNext}
-                disabled={!canGoNext}
-                style={{
-                  border: '1px solid var(--border-default)',
-                  background: canGoNext ? '#fff' : 'var(--bg-inset)',
-                  color: canGoNext ? 'var(--ink-primary)' : 'var(--ink-faint)',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: canGoNext ? 'pointer' : 'not-allowed',
-                  fontWeight: 800,
-                  fontSize: '14px',
-                  transition: 'all 0.15s ease'
-                }}
-                title="Next Stage"
-              >
-                →
-              </button>
+              <button className="gt-icon-btn" onClick={onNavigateNext} disabled={!canGoNext} title="Next stage">→</button>
             </>
-          ) : currentView === 'questionnaire' ? (
-            <div style={{
-              background: 'var(--bg-inset)',
-              padding: '5px 18px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                fontWeight: 800,
-                color: 'var(--accent)',
-                background: '#fff',
-                padding: '2px 6px',
-                borderRadius: '4px'
-              }}>
-                Phase 0
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                Requirements Questionnaire
-              </span>
-            </div>
           ) : (
-            <div style={{
-              background: 'var(--bg-inset)',
-              padding: '5px 18px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                fontWeight: 800,
-                color: 'var(--accent)',
-                background: '#fff',
-                padding: '2px 6px',
-                borderRadius: '4px'
-              }}>
-                Overview
+            <div className="gt-stage-pill">
+              <span className="gt-stage-tag">
+                {currentView === 'questionnaire' ? 'Phase 0' : currentView === 'running' ? 'Live' : 'Overview'}
               </span>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink-primary)' }}>
-                Multi-Stage Verification System
+              <span className="gt-stage-label">
+                {currentView === 'questionnaire' ? 'Requirements Questionnaire'
+                  : currentView === 'running' ? 'Pipeline run' : 'Multi-Stage Verification System'}
               </span>
             </div>
           )}
         </div>
 
-        {/* Right: New Analysis Button */}
-        <div>
+        {/* Right: new analysis */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
-            onClick={onNewAnalysis}
-            style={{
-              border: 'none',
-              background: 'linear-gradient(135deg, #111827 0%, #1F2937 100%)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: '12px',
-              padding: '7px 18px',
-              borderRadius: 'var(--radius-full)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
+            type="button"
+            className="gt-icon-btn gt-theme-btn"
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+            aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
           >
-            <span>+</span> Run New Agent
+            {theme === 'light' ? (
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+            ) : (
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+            )}
           </button>
+          <button className="gt-btn-lime sm" onClick={onNewAnalysis}><span>+</span> Run New Agent</button>
         </div>
       </div>
     </header>

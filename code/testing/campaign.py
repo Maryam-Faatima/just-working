@@ -4,6 +4,7 @@ Runs after testing.runner. For each test spec it takes the traces of its repeate
 checks every trace against the rubric, and reconciles all runs of that spec in one call,
 so the model, the findings and the report all see the same evidence.
 """
+import copy
 import json
 import os
 import tempfile
@@ -23,16 +24,22 @@ def group_traces(traces):
 
 
 def scope_checks(checks, rubric, target_id):
-    """Keep the checks that can speak for one entry: its own rule and the universal items.
+    """Keep the checks that can speak for one entry, and mark which of them may move it.
 
-    A rule that belongs to another entry is not blamed on this one. A result whose rule is
-    not in the rubric is kept, so nothing is hidden silently."""
+    - The entry's own rubric rule: kept, moves the entry.
+    - A deterministic default rule (U1, crash or empty reply): kept, moves the entry.
+    - A judge-scored default rule (U2, U3): kept so the finding reports it, but marked
+      moves_entry False. It describes the agent's overall behaviour, not this entry.
+    - A rule that belongs to another entry: dropped, so it is not blamed on this one.
+    - A result whose rule is not in the rubric: kept and moves the entry, so nothing is hidden."""
     items = {item["rule_id"]: item for item in rubric.get("items", [])}
     kept = []
     for check in checks:
         item = items.get(check.get("rule_id"))
-        if item is None or item.get("target_id") == target_id or item.get("source") == "default":
+        if item is None or item.get("target_id") == target_id:
             kept.append(check)
+        elif item.get("source") == "default":
+            kept.append(dict(check, moves_entry=item.get("check") == "deterministic"))
     return kept
 
 
@@ -108,15 +115,22 @@ def run_campaign(store, rubric, specs, traces, use_llm=True, complete_json=None,
 
 
 def run(ctx):
-    """Pipeline stage after 'test'. Updates ctx["store"] in place and sets ctx["findings"].
+    """Pipeline stage after 'test'. Sets ctx["findings"] and replaces ctx["store"] with the updated model.
+
+    The model from before this stage is kept in ctx["store_before_check"] and every run starts from
+    it, so running the stage again gives the same result instead of applying the steps twice.
 
     While it works it keeps <output folder>/model_changes.json up to date, one record per
     model flip, so the frontend can show entries changing as the tests are reconciled."""
-    store, rubric, traces = ctx.get("store"), ctx.get("rubric"), ctx.get("traces")
-    if store is None or rubric is None:
+    rubric, traces = ctx.get("rubric"), ctx.get("traces")
+    if ctx.get("store") is None or rubric is None:
         return "skipped: no model or rubric"
     if not traces:
         return "skipped: no traces yet"
+    if ctx.get("store_before_check") is None:
+        ctx["store_before_check"] = copy.deepcopy(ctx["store"])
+    store = copy.deepcopy(ctx["store_before_check"])
+    ctx["store"] = store
     folder = Path(ctx["folder"]) if ctx.get("folder") else None
     changes = []
     total = len(group_traces(traces))

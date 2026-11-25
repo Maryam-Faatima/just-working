@@ -25,7 +25,9 @@ The GreatTest API (`api.py`) is a local FastAPI bridge connecting the React fron
 - `GET /api/agents`
   Lists all analyzed agents present in `outputs/` along with availability flags for `spec.json`, `rubric.json`, `scan.json`, `callgraph.json`, and `model_v0.json`.
 - `GET /api/status/{name}`
-  Retrieves active run progress or the persisted completion status from `run_summary.json`.
+  Retrieves active run progress or the persisted completion status from `run_summary.json`. While a run is active (and when it ends) the response carries `stages`: one entry per pipeline stage, `{stage, status, detail, seconds}`, where status is `pending`, `running`, or the stage result (`ok`, `warning`, `skipped`, `failed`).
+- `GET /api/stage-output/{name}/{stage}`
+  Returns `{agent, stage, output}` for one pipeline stage (`spec`, `scan`, `callgraph`, `model`, `infer`, `test`, `check`, `judge`, `report`), read through the same files as the endpoints above. Always 200 for a known stage; `output` is null until the stage has written something, so the dashboard can call it as soon as a stage ends. `spec` returns `{spec, rubric}` and `report` returns `{evidence, report}`. An unknown stage is 404.
 - `GET /api/summary/{name}`
   Returns `run_summary.json` for an agent.
 - `GET /api/spec/{name}`

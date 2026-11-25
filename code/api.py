@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from jsonschema import Draft202012Validator
 
-from pipeline import run_pipeline
+from pipeline import STAGES, run_pipeline
 from testing import checks, generator, judge
 from understand import phase0
 from understand.outputs import agent_name, safe_name
@@ -166,17 +166,30 @@ def _execute_run(
     spec_data: dict[str, Any] | None,
     reuse_saved: bool,
 ):
+    # One entry per pipeline stage so the frontend can show each stage as it starts and ends.
+    stages = [
+        {"stage": stage, "status": "pending", "detail": "", "seconds": None}
+        for stage, _run in STAGES
+    ]
     ACTIVE_RUNS[name] = {
         "status": "running",
         "agent": name,
         "source": source,
         "detail": "Initializing pipeline run...",
         "error": None,
+        "stages": stages,
     }
 
     def log_progress(msg: str):
         if name in ACTIVE_RUNS:
             ACTIVE_RUNS[name]["detail"] = msg
+
+    def stage_progress(event: dict[str, Any]):
+        for entry in stages:
+            if entry["stage"] == event.get("stage"):
+                entry["status"] = event.get("status", entry["status"])
+                entry["detail"] = event.get("detail", entry["detail"])
+                entry["seconds"] = event.get("seconds", entry["seconds"])
 
     try:
         agent_out = _agent_dir(name)
@@ -197,6 +210,7 @@ def _execute_run(
             use_llm=use_llm,
             log=log_progress,
             spec_path=str(spec_temp_file) if spec_temp_file else None,
+            progress=stage_progress,
         )
         ACTIVE_RUNS[name] = {
             "status": "completed" if summary.get("ok") else "failed",
@@ -205,6 +219,7 @@ def _execute_run(
             "detail": "Pipeline completed.",
             "summary": summary,
             "error": None,
+            "stages": stages,
         }
     except Exception as exc:
         logger.exception("Pipeline run failed")
@@ -214,6 +229,7 @@ def _execute_run(
             "source": source,
             "detail": str(exc),
             "error": str(exc),
+            "stages": stages,
         }
 
 
@@ -296,6 +312,40 @@ def get_status(name: str):
         "status": "idle",
         "agent": name,
     }
+
+
+def _optional(fetch, name: str):
+    """Call one of the read endpoints. None when its file is not there yet."""
+    try:
+        return fetch(name)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return None
+        raise
+
+
+# What each pipeline stage produces, read through the same endpoints the dashboard already uses.
+STAGE_OUTPUTS = {
+    "spec": lambda n: {"spec": _optional(get_spec, n), "rubric": _optional(get_rubric, n)},
+    "scan": lambda n: _optional(get_scan, n),
+    "callgraph": lambda n: _optional(get_callgraph, n),
+    "model": lambda n: _optional(get_model, n),
+    "infer": lambda n: _optional(get_model, n),
+    "test": lambda n: _optional(get_test_run, n),
+    "check": lambda n: get_model_changes(n),
+    "judge": lambda n: _optional(get_judge_results, n),
+    "report": lambda n: {"evidence": _optional(get_evidence, n), "report": _optional(get_report, n)},
+}
+
+
+@app.get("/api/stage-output/{name}/{stage}")
+def get_stage_output(name: str, stage: str):
+    """Output of one pipeline stage, so the dashboard can show it the moment the stage ends.
+
+    Always 200 for a known stage: output is null while the stage has not written anything yet."""
+    if stage not in STAGE_OUTPUTS:
+        raise HTTPException(status_code=404, detail=f"Unknown stage '{stage}'.")
+    return {"agent": name, "stage": stage, "output": STAGE_OUTPUTS[stage](name)}
 
 
 @app.get("/api/summary/{name}")
@@ -729,3 +779,12 @@ def get_judge_results(name: str):
     raise HTTPException(
         status_code=404, detail=f"Judge results for agent '{name}' not found."
     )
+
+
+@app.get("/api/repro/{name}")
+def get_repro_study(name: str):
+    """Return the reproducibility study (EH-6): verdict stability across repeated runs, per persona."""
+    file_path = _agent_dir(name) / "repro_study.json"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Reproducibility study for agent '{name}' not found.")
+    return _read_json(file_path, "repro_study.json")

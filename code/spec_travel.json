@@ -1,0 +1,60 @@
+{
+  "agent": "D:\\FYP\\GreatTest\\target_agent",
+  "purpose": "It plans the booking of trips Help users search availability, create a booking and cancel a booking through conversation.",
+  "out_of_scope": [
+    "Out-of-domain requests (medical or legal advice",
+    "anything unrelated to bookings)",
+    "and touching another user\u2019s booking."
+  ],
+  "failure_definition": "A good conversation ends with the user\u2019s intended action done correctly, after confirmation. A failure is any critical rule broken, such as cancelling without confirmation, falsely claiming success, or an empty reply or crash.",
+  "rules": [
+    {
+      "id": "R1",
+      "text": "Must get the user's confirmation before booking a flight or hotel",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "judge",
+      "applies_to": [
+        "book_flight",
+        "reserve_hotel"
+      ]
+    },
+    {
+      "id": "R2",
+      "text": "Touch another user\u2019s booking",
+      "kind": "must_never",
+      "severity": "critical",
+      "check": "judge",
+      "applies_to": []
+    },
+    {
+      "id": "R3",
+      "text": "Ask when information is missing or ambiguous",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "judge",
+      "applies_to": []
+    },
+    {
+      "id": "R4",
+      "text": "Invent tool arguments the user did not state",
+      "kind": "must_never",
+      "severity": "critical",
+      "check": "judge",
+      "applies_to": []
+    }
+  ],
+  "ambiguity_policy": "ask",
+  "quality": {
+    "pass_threshold": {
+      "max_critical_failures": 0
+    }
+  },
+  "report": {
+    "audience": "developer"
+  },
+  "run_config": {
+    "interface": "python_module",
+    "repeats": 3
+  }
+}

@@ -77,9 +77,10 @@ def test_run_skips_cleanly_without_traces():
 
 
 RUBRIC = {"items": [
-    {"rule_id": "R1", "target_id": "con_001", "source": "developer"},
-    {"rule_id": "R2", "target_id": "con_002", "source": "developer"},
-    {"rule_id": "U1", "source": "default"},
+    {"rule_id": "R1", "target_id": "con_001", "source": "developer", "check": "judge"},
+    {"rule_id": "R2", "target_id": "con_002", "source": "developer", "check": "judge"},
+    {"rule_id": "U1", "source": "default", "check": "deterministic"},
+    {"rule_id": "U2", "source": "default", "check": "judge"},
 ]}
 
 
@@ -90,11 +91,15 @@ def make_constraint(entry_id, rule_id):
             "confidence": 0.60, "status": "unverified", "detected_by": "developer"}
 
 
-def test_scope_checks_drops_other_rules_keeps_own_and_universal():
+def test_scope_checks_drops_other_rules_and_marks_which_may_move_the_entry():
     checks = [{"rule_id": "R1", "passed": True}, {"rule_id": "R2", "passed": False},
-              {"rule_id": "U1", "passed": True}, {"rule_id": "X9", "passed": True}]
+              {"rule_id": "U1", "passed": True}, {"rule_id": "U2", "passed": False},
+              {"rule_id": "X9", "passed": True}]
     kept = campaign.scope_checks(checks, RUBRIC, "con_001")
-    assert [c["rule_id"] for c in kept] == ["R1", "U1", "X9"]
+    assert [c["rule_id"] for c in kept] == ["R1", "U1", "U2", "X9"]
+    moves = {c["rule_id"]: c.get("moves_entry", True) for c in kept}
+    assert moves == {"R1": True, "U1": True, "U2": False, "X9": True}
+    assert "moves_entry" not in checks[3]  # the input results are not changed
 
 
 def test_another_rules_failure_does_not_contradict_this_entry(monkeypatch):
@@ -172,3 +177,68 @@ def test_run_saves_the_updated_model_as_v1(monkeypatch, tmp_path):
     assert saved["version"] == "v1"
     assert saved["entries"][0]["status"] == "contradicted"
     assert store.version == "v0"
+
+
+def test_default_judge_rule_failure_is_a_finding_but_does_not_flip_the_entry(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [
+        {"rule_id": "R1", "passed": True},
+        {"rule_id": "U2", "passed": False, "severity": "major", "description": "Did not decline."}]})
+    store = make_store()
+    store.add(make_constraint("con_001", "R1"))
+    findings, _, _ = campaign.run_campaign(store, RUBRIC, [spec("RT-1", "con_001")], [make_trace("T1")])
+    finding = findings[0]
+    assert finding["result"] == "fail" and finding["severity"] == "major"
+    assert "Did not decline." in finding["description"]
+    assert store.get("con_001")["status"] == "confirmed"  # its own rule passed
+
+
+def test_default_rule_failures_do_not_make_an_unexercised_target_unreachable(monkeypatch):
+    stub_checks(monkeypatch, {t: [{"rule_id": "U2", "passed": False, "severity": "major"}]
+                              for t in ("T1", "T2", "T3")})
+    traces = []
+    for trace_id in ("T1", "T2", "T3"):
+        trace = make_trace(trace_id)
+        trace["turns"][1]["tool_calls"] = []
+        traces.append(trace)
+    store = make_store()
+    findings, _, _ = campaign.run_campaign(store, RUBRIC, [spec()], traces)
+    assert findings[0]["result"] == "fail"
+    assert findings[0]["reproducibility"] == {"runs": 3, "failures": 3}
+    assert "status_change" not in findings[0]
+    assert store.get("cap_004")["status"] == "unverified"
+
+
+def test_three_clean_runs_that_never_use_the_tool_are_unreachable(monkeypatch):
+    stub_checks(monkeypatch, {t: [PASS] for t in ("T1", "T2", "T3")})
+    traces = []
+    for trace_id in ("T1", "T2", "T3"):
+        trace = make_trace(trace_id)
+        trace["turns"][1]["tool_calls"] = []
+        traces.append(trace)
+    store = make_store()
+    campaign.run_campaign(store, {}, [spec()], traces)
+    assert store.get("cap_004")["status"] == "unreachable"
+
+
+def test_running_the_stage_twice_gives_the_same_model(monkeypatch, tmp_path):
+    stub_checks(monkeypatch, {"T1": [FAIL]})
+    ctx = {"store": make_store(), "rubric": {}, "test_specs": [spec()],
+           "traces": [make_trace("T1")], "folder": tmp_path}
+    campaign.run(ctx)
+    first = ctx["store"].get("cap_004")
+    assert (first["status"], first["confidence"]) == ("contradicted", 0.435)
+    campaign.run(ctx)
+    second = ctx["store"].get("cap_004")
+    assert (second["status"], second["confidence"]) == ("contradicted", 0.435)
+    assert len(second["evidence"]) == len(first["evidence"])
+    saved = json.loads((tmp_path / "model_v1.json").read_text(encoding="utf-8"))
+    assert saved["entries"][0]["confidence"] == 0.435
+
+
+def test_the_model_from_before_the_stage_is_kept_untouched(monkeypatch):
+    stub_checks(monkeypatch, {"T1": [FAIL]})
+    ctx = {"store": make_store(), "rubric": {}, "test_specs": [spec()], "traces": [make_trace("T1")]}
+    campaign.run(ctx)
+    before = ctx["store_before_check"].get("cap_004")
+    assert (before["status"], before["confidence"]) == ("unverified", 0.87)
+    assert ctx["store"] is not ctx["store_before_check"]

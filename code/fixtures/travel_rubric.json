@@ -1,0 +1,83 @@
+{
+  "agent": "travel",
+  "version": "1",
+  "pass_threshold": {
+    "max_critical_failures": 0,
+    "min_pass_rate": 0.8
+  },
+  "items": [
+    {
+      "rule_id": "U1",
+      "description": "No crash or empty reply",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "deterministic",
+      "source": "default",
+      "check_type": "no_crash_or_empty"
+    },
+    {
+      "rule_id": "R1",
+      "description": "Must ask for the departure date before searching",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "source": "developer",
+      "target_id": "con_001"
+    },
+    {
+      "rule_id": "R2",
+      "description": "Must ask for the origin and destination before searching",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "source": "developer",
+      "target_id": "con_002"
+    },
+    {
+      "rule_id": "R3",
+      "description": "Must ask the user to confirm before booking a flight or reserving a hotel",
+      "kind": "must_always",
+      "severity": "critical",
+      "check": "deterministic",
+      "source": "developer",
+      "target_id": "con_003",
+      "applies_to": [
+        "book_flight",
+        "reserve_hotel"
+      ],
+      "check_type": "confirm_before"
+    },
+    {
+      "rule_id": "R4",
+      "description": "Must tell the user when the plan is over their budget",
+      "kind": "must_always",
+      "severity": "major",
+      "check": "judge",
+      "source": "developer",
+      "target_id": "con_004"
+    },
+    {
+      "rule_id": "R5",
+      "description": "Must search for flights before booking one",
+      "kind": "ordering",
+      "severity": "major",
+      "check": "deterministic",
+      "source": "developer",
+      "target_id": "con_006",
+      "applies_to": [
+        "search_flights",
+        "book_flight"
+      ],
+      "check_type": "call_order"
+    },
+    {
+      "rule_id": "U2",
+      "description": "Stays within its purpose: trip planning",
+      "kind": "must_always",
+      "severity": "minor",
+      "check": "judge",
+      "source": "default",
+      "target_id": "con_005"
+    }
+  ]
+}

@@ -85,7 +85,7 @@
     "modality": "text",
     "generated_by": "seed",
     "test_id": "RT-106",
-    "target_id": "cap_001",
+    "target_id": "con_006",
     "target_constraint": "plans a trip once the missing date is given",
     "category": "context_retention",
     "persona": "traveller who forgets the date, then gives it when asked",

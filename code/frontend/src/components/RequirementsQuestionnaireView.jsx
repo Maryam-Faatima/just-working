@@ -43,6 +43,72 @@ const AUDIENCES = [
   { id: 'manager', label: 'Manager / Lead', desc: 'High-level safety posture & summaries' }
 ];
 
+const SEV_DARK = { critical: '#f87171', major: '#fbbf24', minor: '#60a5fa' };
+
+const ICON_PROPS = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+const SOURCE_MODES = [
+  {
+    id: 'git', label: 'Git Repository URL', desc: 'Clone a remote repo each run',
+    icon: <svg {...ICON_PROPS}><circle cx="6" cy="6" r="2.2" /><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="9" r="2.2" /><path d="M6 8.2v7.6M18 11.2c0 3-6 2-12 4.6" /></svg>
+  },
+  {
+    id: 'folder', label: 'Local Directory', desc: 'Point at a folder on the server',
+    icon: <svg {...ICON_PROPS}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /></svg>
+  },
+  {
+    id: 'zip', label: 'Upload Archive', desc: 'Drop a .zip of your agent code',
+    icon: <svg {...ICON_PROPS}><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+  }
+];
+
+// One card per question. Required/optional rules mirror the existing validation:
+// only the source and Question 1 are enforced when running.
+const STEPS = [
+  { id: 'source', section: 'Setup', title: 'Where is your agent?', required: true,
+    hint: 'Paste a Git URL, a folder path, or upload a zip.' },
+  { id: 'purpose', section: 'Section 1 · Purpose & scope', title: 'What is the agent supposed to achieve for its users?', required: true,
+    hint: 'One or two sentences is enough.' },
+  { id: 'scope', section: 'Section 1 · Purpose & scope', title: 'What should it refuse or stay out of, even if a user asks?', required: false,
+    hint: 'Separate items with commas.' },
+  { id: 'failure', section: 'Section 1 · Purpose & scope', title: 'What would make you call a conversation a failure?', required: false,
+    hint: 'For example: gives wrong prices, ignores a refund rule.' },
+  { id: 'capabilities', section: 'Section 1 · Purpose & scope', title: 'Anything the agent must be able to do that the code may not show?', required: false,
+    hint: 'Separate items with commas.' },
+  { id: 'rules', section: 'Section 2 · Safety invariants', title: 'Rules the code does not enforce', required: false,
+    hint: 'Each rule becomes a check in the rubric.' },
+  { id: 'ambiguity', section: 'Section 3 · Ambiguity & fragility', title: 'When information is missing or ambiguous, the agent should:', required: false,
+    hint: 'Defaults to asking the user.' },
+  { id: 'weak', section: 'Section 3 · Ambiguity & fragility', title: 'Where do you suspect the agent is fragile or has misbehaved before?', required: false,
+    hint: 'One per line.' },
+  { id: 'behaviors', section: 'Section 3 · Ambiguity & fragility', title: 'Which user behaviors cause trouble in practice?', required: false,
+    hint: 'One per line. For example: impatient, vague, changes their mind.' },
+  { id: 'services', section: 'Section 4 · External services', title: 'External services & mocking strategies', required: false,
+    hint: 'Mark services that are unsafe to call during tests.' },
+  { id: 'quality', section: 'Section 5 · Quality standards', title: 'Beyond correctness, what matters in replies?', required: false,
+    hint: 'Tone, length, format or language.' },
+  { id: 'threshold', section: 'Section 5 · Quality standards', title: 'How many critical failures are acceptable?', required: false,
+    hint: 'Sets when a run counts as passed.' },
+  { id: 'reference', section: 'Section 6 · Reference & reporting', title: 'Real conversations, logs or bug reports we can learn from?', required: false,
+    hint: 'File paths, one per line.' },
+  { id: 'report', section: 'Section 6 · Reference & reporting', title: 'Who will read the report?', required: false,
+    hint: 'Pick the emphasis for the final report.' },
+  { id: 'runtime', section: 'Section 7 · Runtime', title: 'Runtime execution & reproducibility settings', required: false,
+    hint: 'How the agent starts and how often each test repeats.' },
+  { id: 'review', section: 'Final step', title: 'Review & run', required: false,
+    hint: 'Check your answers, then run.' }
+];
+
+function Chips({ text }) {
+  const items = (text || '').split(/,|\n/).map((s) => s.trim()).filter(Boolean);
+  if (!items.length) return null;
+  return <div className="gt-chips">{items.map((t, i) => <span className="gt-chip" key={i}>{t}</span>)}</div>;
+}
+
+function LineCount({ text }) {
+  const n = (text || '').split('\n').map((s) => s.trim()).filter(Boolean).length;
+  return n ? <div className="gt-count">{n} {n === 1 ? 'item' : 'items'}</div> : null;
+}
+
 export function RequirementsQuestionnaireView({
   currentAgent,
   specData,
@@ -64,6 +130,10 @@ export function RequirementsQuestionnaireView({
   const [savedSpecRulesCount, setSavedSpecRulesCount] = useState(0);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [step, setStep] = useState(0);
+  const [notice, setNotice] = useState(null);
+  const [dir, setDir] = useState('fwd');
+  const [dragOver, setDragOver] = useState(false);
 
   // Question 1: Purpose
   const [purpose, setPurpose] = useState('');
@@ -435,1395 +505,513 @@ export function RequirementsQuestionnaireView({
     }
   };
 
-  return (
-    <div className="animate-fade-in" style={{ maxWidth: '1240px', margin: '16px auto 100px', padding: '0 24px' }}>
-      
-      {/* Header Banner */}
-      <div style={{ marginBottom: '24px' }}>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            style={{
-              border: '1.5px solid var(--border-default)',
-              background: '#fff',
-              color: 'var(--ink-secondary)',
-              fontWeight: 700,
-              fontSize: '12px',
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-full)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginBottom: '12px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <span>←</span>
-            <span>Back</span>
-          </button>
-        )}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          color: 'var(--accent)',
-          fontSize: '11px',
-          fontWeight: 800,
-          textTransform: 'uppercase',
-          letterSpacing: '0.8px',
-          marginBottom: '6px'
-        }}>
-          Phase 0 Developer Requirements Specification
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '32px', fontWeight: 800, color: 'var(--ink-primary)', letterSpacing: '-0.7px' }}>
-              Phase 0 Requirements Questionnaire
-            </h1>
-            <p style={{ color: 'var(--ink-secondary)', fontSize: '14.5px', marginTop: '4px', maxWidth: '780px', lineHeight: 1.5 }}>
-              Answer what the source code does not say. Every rule compiles into unverified safety constraints in Behavioral Model V0 and grading criteria in the Rubric.
-            </p>
-          </div>
+  // ---------------------------------------------------------------------------
+  // Wizard: one card per question. Logic above is unchanged; only the UI differs.
+  // ---------------------------------------------------------------------------
+  const currentSource =
+    (sourceMode === 'git' ? gitUrl : sourceMode === 'folder' ? localFolder : uploadedPath).trim() || sourceLocation.trim();
+  const sourceOk = Boolean(currentSource || targetAgent);
+  const purposeOk = purpose.trim().length >= 5;
 
-          {/* Quick Nav / Spec View Button */}
-          {onNavigateToSpec && (
-            <button
-              onClick={onNavigateToSpec}
-              style={{
-                border: '1px solid var(--border-default)',
-                background: '#fff',
-                color: 'var(--ink-secondary)',
-                fontWeight: 700,
-                fontSize: '12px',
-                padding: '8px 16px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <span>View Compiled Specs & Rubric</span>
-              <span>↗</span>
-            </button>
-          )}
-        </div>
-      </div>
+  const isAnswered = (id) => {
+    switch (id) {
+      case 'source': return sourceOk;
+      case 'purpose': return purposeOk;
+      case 'scope': return Boolean(outOfScopeInput.trim());
+      case 'failure': return Boolean(failureDef.trim());
+      case 'capabilities': return Boolean(capabilitiesInput.trim());
+      case 'rules': return rules.length > 0;
+      case 'ambiguity': return true;
+      case 'weak': return Boolean(weakSpotsText.trim());
+      case 'behaviors': return Boolean(userBehaviorsText.trim());
+      case 'services': return services.length > 0;
+      case 'quality': return Boolean(qualityNotes.trim());
+      case 'threshold': return minPassRate !== '' || Number(maxCriticalFailures) !== 0;
+      case 'reference': return Boolean(referenceMaterialText.trim());
+      case 'report': return Boolean(reportEmphasis.trim());
+      case 'runtime': return Boolean(entryPoint.trim());
+      default: return false;
+    }
+  };
 
-      {/* Agent Source & Configuration Card */}
-      <div style={{
-        background: '#fff',
-        border: '1.5px solid var(--border-default)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '22px 24px',
-        boxShadow: 'var(--shadow-card)',
-        marginBottom: '24px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              Agent Repository & Source
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--ink-muted)', margin: '2px 0 0' }}>
-              Enter the Git repository URL, local folder path, or code archive to analyze.
-            </p>
-          </div>
+  const flash = (msg) => {
+    setNotice(msg);
+    clearTimeout(window.__gtNoticeTimer);
+    window.__gtNoticeTimer = setTimeout(() => setNotice(null), 3200);
+  };
+  const goTo = (i) => {
+    const t = Math.max(0, Math.min(STEPS.length - 1, i));
+    setDir(t >= step ? 'fwd' : 'back');
+    setStep(t);
+  };
+  const goNext = () => {
+    if (STEPS[step].required && !isAnswered(STEPS[step].id)) flash('Needed before you can run. You can come back to it.');
+    goTo(step + 1);
+  };
+  // Jump past every optional card: to the first missing required one, otherwise to the review.
+  const skipAllOptional = () => {
+    const missing = STEPS.findIndex((s) => s.required && !isAnswered(s.id));
+    const skipped = STEPS.filter((s) => !s.required && s.id !== 'review' && !isAnswered(s.id)).length;
+    if (missing >= 0 && missing !== step) {
+      goTo(missing);
+      flash('Fill in the required answer first.');
+    } else if (missing < 0) {
+      goTo(STEPS.length - 1);
+      flash(`Skipped ${skipped} optional ${skipped === 1 ? 'question' : 'questions'}. Ready to run.`);
+    }
+  };
+  const requiredLeft = STEPS.filter((s) => s.required && !isAnswered(s.id)).length;
+  const doneCount = STEPS.filter((s) => s.id !== 'review' && isAnswered(s.id)).length;
+  const enterNext = (e) => {
+    if (e.key === 'Enter' && step < STEPS.length - 1) {
+      e.preventDefault();
+      goTo(step + 1);
+    }
+  };
 
-          {/* Mode Switcher & Reset Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={clearFormState}
-              title="Clear all fields to start a new questionnaire"
-              style={{
-                border: '1px solid var(--border-default)',
-                background: '#fff',
-                color: 'var(--ink-muted)',
-                fontWeight: 600,
-                fontSize: '11px',
-                padding: '5px 10px',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer'
-              }}
-            >
-              Clear Fields
-            </button>
-            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-inset)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
-              {[
-                { id: 'git', label: 'Git Repository URL' },
-                { id: 'folder', label: 'Local Directory' },
-                { id: 'zip', label: 'Upload Archive' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setSourceMode(tab.id);
-                  }}
-                  style={{
-                    border: 'none',
-                    background: sourceMode === tab.id ? '#fff' : 'transparent',
-                    color: sourceMode === tab.id ? 'var(--ink-primary)' : 'var(--ink-muted)',
-                    fontWeight: sourceMode === tab.id ? 700 : 500,
-                    fontSize: '12px',
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    boxShadow: sourceMode === tab.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
-                  }}
-                >
-                  {tab.label}
+  const cur = STEPS[step];
+  const isReview = cur.id === 'review';
+  const answered = isAnswered(cur.id);
+
+  const renderBody = (id) => {
+    switch (id) {
+      case 'source':
+        return (
+          <div className="gt-stack">
+            <div className="gt-tiles">
+              {SOURCE_MODES.map((m) => (
+                <button type="button" key={m.id} className={`gt-tile${sourceMode === m.id ? ' on' : ''}`} onClick={() => setSourceMode(m.id)}>
+                  {m.icon}
+                  <b>{m.label}</b>
+                  <span>{m.desc}</span>
                 </button>
               ))}
             </div>
+
+            {sourceMode === 'git' && (
+              <div>
+                <label className="gt-fieldlabel">Git Repository URL *</label>
+                <input className="gt-field mono" type="text" value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} onKeyDown={enterNext}
+                  placeholder="https://github.com/gaurav-oberoi/support-agent-hitl" />
+              </div>
+            )}
+            {sourceMode === 'folder' && (
+              <div>
+                <label className="gt-fieldlabel">Local Folder Path *</label>
+                <input className="gt-field mono" type="text" value={localFolder} onChange={(e) => setLocalFolder(e.target.value)} onKeyDown={enterNext}
+                  placeholder="/home/user/my-agent or ./benchmarks/trip-planner" />
+              </div>
+            )}
+            {sourceMode === 'zip' && (
+              <label
+                className={`gt-drop${dragOver ? ' over' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload({ target: { files: e.dataTransfer.files } }); }}
+              >
+                <input type="file" accept=".zip,application/zip" onChange={handleFileUpload} disabled={isUploading} hidden />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+                <b>{isUploading ? 'Uploading archive...' : uploadedPath ? 'Archive uploaded' : 'Drop your .zip here, or click to browse'}</b>
+                <span>Upload Code Archive (.zip) *</span>
+                {uploadedPath && <code>✓ Uploaded to server: {uploadedPath}</code>}
+              </label>
+            )}
+
+            <div className="gt-row">
+              <div>
+                <label className="gt-fieldlabel">Target Agent Identifier</label>
+                <input className="gt-field mono" type="text" value={targetAgent} onChange={(e) => setTargetAgent(e.target.value)} onKeyDown={enterNext}
+                  placeholder="e.g. support-agent-hitl" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '12px' }}>
+                <label className="gt-check">
+                  <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} />
+                  Enable LLM Analysis
+                </label>
+              </div>
+            </div>
+
+            {hasSavedSpec && (
+              <div className="gt-banner" style={{ marginTop: 0 }}>
+                <span>Found saved Phase 0 answers for <strong>{targetAgent}</strong> ({savedSpecRulesCount} rules) from an earlier run.</span>
+                <button type="button" className="gt-btn-ghost" style={{ padding: '7px 16px', fontSize: '12px' }} onClick={handleLoadSavedSpec}>
+                  Load Saved Answers into Form
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" className="gt-link-btn" onClick={handleLoadSavedSpec}>Load Saved Spec</button>
+              <button type="button" className="gt-link-btn" onClick={clearFormState} title="Clear all fields to start a new questionnaire">Clear Fields</button>
+            </div>
           </div>
+        );
+
+      case 'purpose':
+        return (
+          <textarea className="gt-field" rows={4} required value={purpose} onChange={(e) => setPurpose(e.target.value)} autoFocus
+            placeholder="e.g. A trip planning assistant that coordinates flight searches, activity reservations, and budget optimization for travelers." />
+        );
+
+      case 'scope':
+        return (
+          <>
+            <input className="gt-field" type="text" value={outOfScopeInput} onChange={(e) => setOutOfScopeInput(e.target.value)} onKeyDown={enterNext} autoFocus
+              placeholder="e.g. payment processing, credit card details, medical advice" />
+            <Chips text={outOfScopeInput} />
+          </>
+        );
+
+      case 'failure':
+        return (
+          <input className="gt-field" type="text" value={failureDef} onChange={(e) => setFailureDef(e.target.value)} onKeyDown={enterNext} autoFocus
+            placeholder="e.g. Booking flights without user confirmation, exceeding budget" />
+        );
+
+      case 'capabilities':
+        return (
+          <>
+            <input className="gt-field" type="text" value={capabilitiesInput} onChange={(e) => setCapabilitiesInput(e.target.value)} onKeyDown={enterNext} autoFocus
+              placeholder="e.g. currency conversion, multi-city itineraries, polite tone de-escalation" />
+            <Chips text={capabilitiesInput} />
+          </>
+        );
+
+      case 'rules':
+        return (
+          <>
+            {rules.length === 0 ? (
+              <div className="gt-empty">No rules added yet. Add at least one rule below (e.g. "Must confirm before cancelling bookings").</div>
+            ) : (
+              <div className="gt-items">
+                {rules.map((rule, idx) => {
+                  const sev = SEV_DARK[rule.severity] || SEV_DARK.major;
+                  return (
+                    <div className="gt-item" key={idx}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+                        <span className="gt-badge" style={{ color: sev, background: 'rgba(255,255,255,0.06)' }}>{rule.id || `R${idx + 1}`}</span>
+                        <span className="txt">{rule.text}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className="gt-badge">{rule.kind}</span>
+                        <span className="gt-badge" style={{ color: sev }}>{rule.severity}</span>
+                        <span className="gt-badge">{rule.check === 'deterministic' ? 'Deterministic' : 'LLM Judge'}</span>
+                        {rule.applies_to && rule.applies_to.length > 0 && (
+                          <span style={{ fontSize: '11px', color: 'var(--gt-ink-dim)', fontFamily: 'var(--font-mono)' }}>[{rule.applies_to.join(', ')}]</span>
+                        )}
+                        <button type="button" className="gt-x" onClick={() => handleRemoveRule(idx)} title="Remove rule">✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="gt-addbox">
+              <div className="ttl">+ Add Safety Invariant Rule</div>
+              <div className="gt-stack" style={{ gap: '16px' }}>
+                <div>
+                  <label className="gt-fieldlabel">Rule Statement (e.g. 'Must confirm before cancelling bookings') *</label>
+                  <input className="gt-field" type="text" value={newRuleText} onChange={(e) => setNewRuleText(e.target.value)}
+                    placeholder="e.g. Must verify budget limit before creating reservation" />
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">Type of Rule</label>
+                  <div className="gt-pills">
+                    {KINDS.map((k) => (
+                      <button type="button" key={k.id} title={k.desc} className={`gt-pill${newRuleKind === k.id ? ' on' : ''}`} onClick={() => setNewRuleKind(k.id)}>{k.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">Severity if Broken</label>
+                  <div className="gt-pills">
+                    {SEVERITIES.map((s) => (
+                      <button type="button" key={s.id} className={`gt-pill${newRuleSeverity === s.id ? ' on' : ''}`} onClick={() => setNewRuleSeverity(s.id)}>{s.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">Verification Check Mode</label>
+                  <div className="gt-pills">
+                    <button type="button" className={`gt-pill${newRuleCheck === 'judge' ? ' on' : ''}`} onClick={() => setNewRuleCheck('judge')}>LLM Judge (Semantic reasoning)</button>
+                    <button type="button" className={`gt-pill${newRuleCheck === 'deterministic' ? ' on' : ''}`} onClick={() => setNewRuleCheck('deterministic')}>Deterministic (From tool calls alone)</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">Tool Concerns (Optional)</label>
+                  <input className="gt-field mono" type="text" value={newRuleAppliesTo} onChange={(e) => setNewRuleAppliesTo(e.target.value)} placeholder="e.g. book_hotel, cancel_flight" />
+                </div>
+                <div><button type="button" className="gt-btn-lime sm" onClick={handleAddRule}>+ Add Rule</button></div>
+              </div>
+            </div>
+          </>
+        );
+
+      case 'ambiguity':
+        return (
+          <div className="gt-tiles" style={{ gridTemplateColumns: '1fr' }}>
+            {POLICIES.map((p) => (
+              <button type="button" key={p.id} className={`gt-tile${ambiguityPolicy === p.id ? ' on' : ''}`} onClick={() => setAmbiguityPolicy(p.id)}>
+                <b>{p.label}</b>
+                <span>{p.desc}</span>
+              </button>
+            ))}
+          </div>
+        );
+
+      case 'weak':
+        return (
+          <>
+            <textarea className="gt-field mono" rows={5} value={weakSpotsText} onChange={(e) => setWeakSpotsText(e.target.value)} autoFocus
+              placeholder={'e.g.\nLooping between hotel booking and budget critic\nDate parsing with ambiguous formats like dd/mm vs mm/dd'} />
+            <LineCount text={weakSpotsText} />
+          </>
+        );
+
+      case 'behaviors':
+        return (
+          <>
+            <textarea className="gt-field mono" rows={5} value={userBehaviorsText} onChange={(e) => setUserBehaviorsText(e.target.value)} autoFocus
+              placeholder={'e.g.\nimpatient users repeatedly re-asking questions\nvague budget without specifying currency\nswitching destinations midway'} />
+            <LineCount text={userBehaviorsText} />
+          </>
+        );
+
+      case 'services':
+        return (
+          <>
+            {services.length === 0 ? (
+              <div className="gt-empty">No external services declared. Add dependent APIs below if your agent connects to external services.</div>
+            ) : (
+              <div className="gt-items">
+                {services.map((srv, idx) => (
+                  <div className="gt-item" key={idx}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span className="txt" style={{ fontFamily: 'var(--font-mono)' }}>{srv.name}</span>
+                      {srv.unsafe_to_hit && <span className="gt-badge" style={{ color: 'var(--gt-bad)' }}>Unsafe to call for real</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span className="gt-badge">Mock: {srv.mock}</span>
+                      {srv.failure_modes && srv.failure_modes.length > 0 && (
+                        <span style={{ fontSize: '11px', color: 'var(--gt-ink-dim)' }}>Failures: {srv.failure_modes.join(', ')}</span>
+                      )}
+                      <button type="button" className="gt-x" onClick={() => handleRemoveService(idx)} title="Remove service">✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="gt-addbox">
+              <div className="ttl">+ Add External Dependency</div>
+              <div className="gt-stack" style={{ gap: '16px' }}>
+                <div>
+                  <label className="gt-fieldlabel">10. Service Name *</label>
+                  <input className="gt-field" type="text" value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="e.g. Stripe, Amadeus Flights, Twilio" />
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">11. Mocking Strategy</label>
+                  <div className="gt-pills">
+                    {MOCKS.map((m) => (
+                      <button type="button" key={m.id} title={m.desc} className={`gt-pill${newServiceMock === m.id ? ' on' : ''}`} onClick={() => setNewServiceMock(m.id)}>{m.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="gt-fieldlabel">12. Failures to Test (Comma-separated)</label>
+                  <input className="gt-field" type="text" value={newServiceFailures} onChange={(e) => setNewServiceFailures(e.target.value)} placeholder="e.g. timeout, rate_limit, 500 error" />
+                </div>
+                <label className="gt-check" style={{ color: 'var(--gt-bad)' }}>
+                  <input type="checkbox" checked={newServiceUnsafe} onChange={(e) => setNewServiceUnsafe(e.target.checked)} style={{ accentColor: '#f87171' }} />
+                  Unsafe to call during test
+                </label>
+                <div><button type="button" className="gt-btn-lime sm" onClick={handleAddService}>+ Add Service</button></div>
+              </div>
+            </div>
+          </>
+        );
+
+      case 'quality':
+        return (
+          <input className="gt-field" type="text" value={qualityNotes} onChange={(e) => setQualityNotes(e.target.value)} onKeyDown={enterNext} autoFocus
+            placeholder="e.g. Concise bullet points, polite tone, zero markdown rendering bugs" />
+        );
+
+      case 'threshold':
+        return (
+          <div className="gt-row">
+            <div>
+              <label className="gt-fieldlabel">Critical failures allowed</label>
+              <input className="gt-field mono" type="number" min="0" max="1000" value={maxCriticalFailures} onChange={(e) => setMaxCriticalFailures(e.target.value)} />
+              <div className="gt-count">Default is 0 (zero tolerance for critical violations).</div>
+            </div>
+            <div>
+              <label className="gt-fieldlabel">Minimum Pass Rate (0.0 to 1.0)</label>
+              <input className="gt-field mono" type="number" step="0.05" min="0" max="1" value={minPassRate} onChange={(e) => setMinPassRate(e.target.value)} placeholder="e.g. 0.95" />
+              <div className="gt-count">Overall test threshold from 0 to 1 (empty to skip, e.g. 0.95 for 95%).</div>
+            </div>
+          </div>
+        );
+
+      case 'reference':
+        return (
+          <>
+            <textarea className="gt-field mono" rows={5} value={referenceMaterialText} onChange={(e) => setReferenceMaterialText(e.target.value)} autoFocus
+              placeholder={'e.g.\nlogs/prod_interactions.jsonl\ntests/fixtures/past_failures.txt'} />
+            <LineCount text={referenceMaterialText} />
+          </>
+        );
+
+      case 'report':
+        return (
+          <div className="gt-stack">
+            <div className="gt-tiles">
+              {AUDIENCES.map((a) => (
+                <button type="button" key={a.id} className={`gt-tile${reportAudience === a.id ? ' on' : ''}`} onClick={() => setReportAudience(a.id)}>
+                  <b>{a.label}</b>
+                  <span>{a.desc}</span>
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="gt-fieldlabel">Report Emphasis (Comma-separated)</label>
+              <input className="gt-field" type="text" value={reportEmphasis} onChange={(e) => setReportEmphasis(e.target.value)} onKeyDown={enterNext}
+                placeholder="e.g. security, financial accuracy, edge case coverage" />
+              <Chips text={reportEmphasis} />
+            </div>
+          </div>
+        );
+
+      case 'runtime':
+        return (
+          <div className="gt-stack">
+            <div>
+              <label className="gt-fieldlabel">Agent Entry File or Command</label>
+              <input className="gt-field mono" type="text" value={entryPoint} onChange={(e) => setEntryPoint(e.target.value)} placeholder="e.g. python main.py or graph:app" />
+            </div>
+            <div>
+              <label className="gt-fieldlabel">Interface Architecture</label>
+              <div className="gt-pills">
+                <button type="button" className={`gt-pill${interfaceType === 'python_module' ? ' on' : ''}`} onClick={() => setInterfaceType('python_module')}>Python Module (Callable graph)</button>
+                <button type="button" className={`gt-pill${interfaceType === 'http' ? ' on' : ''}`} onClick={() => setInterfaceType('http')}>HTTP Service (REST / WebSocket endpoint)</button>
+              </div>
+            </div>
+            <div style={{ maxWidth: '260px' }}>
+              <label className="gt-fieldlabel">Repeated Runs to Check Reproducibility</label>
+              <input className="gt-field mono" type="number" min="1" max="20" value={repeats} onChange={(e) => setRepeats(e.target.value)} />
+            </div>
+          </div>
+        );
+
+      default: { // review
+        const audience = AUDIENCES.find((a) => a.id === reportAudience)?.label || reportAudience;
+        const policy = POLICIES.find((p) => p.id === ambiguityPolicy)?.label || ambiguityPolicy;
+        return (
+          <>
+            {!sourceOk && (
+              <div className="gt-missing"><span>Required: agent source or identifier</span><button type="button" className="gt-link-btn" onClick={() => goTo(0)}>Fix</button></div>
+            )}
+            {!purposeOk && (
+              <div className="gt-missing"><span>Required: Question 1 (Purpose), at least 5 characters</span><button type="button" className="gt-link-btn" onClick={() => goTo(1)}>Fix</button></div>
+            )}
+            <div className="gt-review">
+              <div className="cell"><div className="k">Agent</div><div className="v mono">{targetAgent || '—'}</div></div>
+              <div className="cell"><div className="k">Source</div><div className="v mono">{currentSource || '—'}</div></div>
+              <div className="cell" style={{ gridColumn: '1 / -1' }}><div className="k">Purpose</div><div className="v">{purpose.trim() || '—'}</div></div>
+              <div className="cell"><div className="k">Rules</div><div className="v">{rules.length}</div></div>
+              <div className="cell"><div className="k">External services</div><div className="v">{services.length}</div></div>
+              <div className="cell"><div className="k">Ambiguity policy</div><div className="v">{policy}</div></div>
+              <div className="cell"><div className="k">Report audience</div><div className="v">{audience}</div></div>
+              <div className="cell"><div className="k">Repeated runs</div><div className="v">{repeats}</div></div>
+              <div className="cell"><div className="k">LLM analysis</div><div className="v">{useLlm ? 'Enabled' : 'Off'}</div></div>
+            </div>
+          </>
+        );
+      }
+    }
+  };
+
+  return (
+    <div className="gt-wiz animate-fade-in">
+      <div className="gt-wiz-top">
+        <div>
+          <h1>About your agent</h1>
+          <p>Tell us what the code can’t. Only two answers are required.</p>
         </div>
-
-        {/* Source Inputs Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1.8fr) minmax(200px, 1fr) auto', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          {sourceMode === 'git' && (
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                Git Repository URL *
-              </label>
-              <input
-                type="text"
-                value={gitUrl}
-                onChange={(e) => setGitUrl(e.target.value)}
-                placeholder="https://github.com/gaurav-oberoi/support-agent-hitl"
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '13px',
-                  color: 'var(--ink-primary)'
-                }}
-              />
-            </div>
-          )}
-
-          {sourceMode === 'folder' && (
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                Local Folder Path *
-              </label>
-              <input
-                type="text"
-                value={localFolder}
-                onChange={(e) => setLocalFolder(e.target.value)}
-                placeholder="/home/user/my-agent or ./benchmarks/trip-planner"
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '13px',
-                  color: 'var(--ink-primary)'
-                }}
-              />
-            </div>
-          )}
-
-          {sourceMode === 'zip' && (
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                Upload Code Archive (.zip) *
-              </label>
-              <input
-                type="file"
-                accept=".zip,application/zip"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-                style={{
-                  width: '100%',
-                  padding: '7px 10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '12px'
-                }}
-              />
-              {isUploading && <span style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '4px', display: 'block' }}>Uploading archive...</span>}
-              {uploadedPath && <span style={{ fontSize: '11px', color: '#16A34A', fontFamily: 'var(--font-mono)', marginTop: '4px', display: 'block' }}>✓ Uploaded to server: {uploadedPath}</span>}
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-              Target Agent Identifier
-            </label>
-            <input
-              type="text"
-              value={targetAgent}
-              onChange={(e) => setTargetAgent(e.target.value)}
-              placeholder="e.g. support-agent-hitl"
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: 'var(--radius-md)',
-                border: '1.5px solid var(--border-default)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '13px',
-                fontWeight: 700,
-                color: 'var(--ink-primary)'
-              }}
-            />
-          </div>
-
-          <div style={{ paddingBottom: '6px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-              <input
-                type="checkbox"
-                checked={useLlm}
-                onChange={(e) => setUseLlm(e.target.checked)}
-                style={{ width: '16px', height: '16px', accentColor: 'var(--accent)' }}
-              />
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-secondary)' }}>
-                Enable LLM Analysis
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Existing Spec Detection Banner */}
-        {hasSavedSpec && (
-          <div style={{
-            marginTop: '16px',
-            background: 'var(--accent-light)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ fontSize: '12.5px', color: 'var(--ink-primary)' }}>
-              Found saved Phase 0 answers for <strong>{targetAgent}</strong> ({savedSpecRulesCount} rules) from an earlier run.
-            </div>
-            <button
-              type="button"
-              onClick={handleLoadSavedSpec}
-              style={{
-                border: '1px solid var(--accent)',
-                background: '#fff',
-                color: 'var(--accent)',
-                fontWeight: 700,
-                fontSize: '11.5px',
-                padding: '5px 14px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer'
-              }}
-            >
-              Load Saved Answers into Form
-            </button>
-          </div>
-        )}
-
-        {/* Top Action Buttons */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
-          <button
-            type="button"
-            onClick={handleLoadSavedSpec}
-            style={{
-              border: '1px solid var(--border-default)',
-              background: 'var(--bg-surface-soft)',
-              color: 'var(--ink-primary)',
-              fontWeight: 700,
-              fontSize: '12px',
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer'
-            }}
-          >
-            Load Saved Spec
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            style={{
-              border: '1.5px solid var(--accent)',
-              background: '#fff',
-              color: 'var(--accent)',
-              fontWeight: 700,
-              fontSize: '12px',
-              padding: '8px 18px',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer'
-            }}
-          >
-            {isSaving ? 'Saving...' : 'Save Spec'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveAndRun}
-            style={{
-              border: 'none',
-              background: 'linear-gradient(135deg, var(--accent) 0%, #EA580C 100%)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: '12.5px',
-              padding: '9px 20px',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(224, 93, 56, 0.25)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>Run Pipeline & Analyze Agent</span>
-            <span>➔</span>
-          </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {onBack && <button type="button" className="gt-link-btn" onClick={onBack}>← Exit</button>}
+          {onNavigateToSpec && <button type="button" className="gt-link-btn" onClick={onNavigateToSpec}>View Compiled Specs &amp; Rubric ↗</button>}
         </div>
       </div>
 
+      <div className="gt-steps">
+        {STEPS.map((s, i) => {
+          const done = s.id !== 'review' && isAnswered(s.id);
+          const cls = i === step ? 'active' : done ? 'done' : s.required && s.id !== 'review' ? 'req' : '';
+          return <button type="button" key={s.id} className={`gt-dot ${cls}`} onClick={() => goTo(i)} title={s.title} aria-label={`Step ${i + 1}: ${s.title}`} />;
+        })}
+      </div>
+      <div className="gt-prog"><div style={{ width: `${(step / (STEPS.length - 1)) * 100}%` }} /></div>
+      <div className="gt-step-meta">
+        <span>Step {step + 1} of {STEPS.length} · {requiredLeft === 0 ? 'required done' : `${requiredLeft} required left`}</span>
+        <span className="legend">
+          <span><i style={{ background: 'var(--gt-lime)' }} />Answered</span>
+          <span><i style={{ background: 'var(--gt-warn)' }} />Required</span>
+        </span>
+        {!isReview && <button type="button" className="gt-skipall" onClick={skipAllOptional}>Skip all optional →</button>}
+      </div>
+
+      {notice && <div className="gt-toast" role="status">{notice}</div>}
+
       {saveSuccessMsg && (
-        <div style={{
-          background: 'var(--status-confirmed-bg)',
-          border: '1px solid var(--status-confirmed-border)',
-          color: 'var(--status-confirmed)',
-          padding: '12px 18px',
-          borderRadius: 'var(--radius-md)',
-          marginBottom: '20px',
-          fontSize: '13px',
-          fontWeight: 700,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div className="gt-success">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
           {saveSuccessMsg}
         </div>
       )}
 
-      {/* Main Questionnaire Grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-        {/* SECTION 1: CORE PURPOSE & SCOPE */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-              SECTION 1
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              Core Purpose & Boundary Scope
-            </h2>
+      <div className="gt-deck">
+        {step < STEPS.length - 1 && <div className="gt-ghost g2" />}
+        {step < STEPS.length - 1 && <div className="gt-ghost g1" />}
+        <div className={`gt-card ${dir}`} key={cur.id}>
+          <div className="gt-q-head">
+            <span className="gt-q-section">{cur.section}</span>
+            {!isReview && (cur.required
+              ? <span className="gt-chip-req">Required</span>
+              : <span className="gt-chip-opt">Optional</span>)}
           </div>
+          <h2 className="gt-q-title">{cur.title}</h2>
+          {cur.hint && <p className="gt-q-hint">{cur.hint}</p>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-            {/* Q1: Purpose */}
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                1. What is the agent supposed to achieve for its users? (Purpose) *
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                In a sentence or two. Minimum 5 characters.
-              </p>
-              <textarea
-                rows={3}
-                required
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                placeholder="e.g. A trip planning assistant that coordinates flight searches, activity reservations, and budget optimization for travelers."
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px',
-                  lineHeight: 1.5,
-                  fontFamily: 'inherit'
-                }}
-              />
-            </div>
+          {renderBody(cur.id)}
 
-            {/* Q2: Out of Scope */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                2. What should it refuse or stay out of, even if a user asks? (Out of Scope)
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Comma-separated items. The agent must strictly decline these requests.
-              </p>
-              <input
-                type="text"
-                value={outOfScopeInput}
-                onChange={(e) => setOutOfScopeInput(e.target.value)}
-                placeholder="e.g. payment processing, credit card details, medical advice"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            {/* Q3: Failure Definition */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                3. What would make you call a conversation a failure?
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Critical conversational failure conditions (empty to skip).
-              </p>
-              <input
-                type="text"
-                value={failureDef}
-                onChange={(e) => setFailureDef(e.target.value)}
-                placeholder="e.g. Booking flights without user confirmation, exceeding budget"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            {/* Invisible Capabilities */}
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                Anything the agent must be able to do that the code may not show? (Implicit Capabilities)
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Comma-separated capabilities expected by developers that aren't explicit in AST tool definitions.
-              </p>
-              <input
-                type="text"
-                value={capabilitiesInput}
-                onChange={(e) => setCapabilitiesInput(e.target.value)}
-                placeholder="e.g. currency conversion, multi-city itineraries, polite tone de-escalation"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 2: SAFETY INVARIANTS & RULES */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-                SECTION 2
-              </span>
-              <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-                4–6. Rules The Code Does Not Enforce (Safety Invariants)
-              </h2>
-            </div>
-            <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>
-              {rules.length} {rules.length === 1 ? 'rule configured' : 'rules configured'}
-            </span>
-          </div>
-
-          <p style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-            Every rule declared here is mapped into a <code style={{ color: 'var(--accent)', fontWeight: 700 }}>constraint</code> entry in Behavioral Model V0 and an evaluation item in the Rubric, verifying policies that static code might not guard.
-          </p>
-
-          {/* Active Rules List */}
-          {rules.length === 0 ? (
-            <div style={{ background: 'var(--bg-inset)', padding: '20px', borderRadius: 'var(--radius-md)', textAlign: 'center', color: 'var(--ink-muted)', fontSize: '12.5px', marginBottom: '18px' }}>
-              No rules added yet. Add at least one rule below (e.g. "Must confirm before cancelling bookings").
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-              {rules.map((rule, idx) => {
-                const sevConfig = SEVERITIES.find(s => s.id === rule.severity) || SEVERITIES[1];
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      background: 'var(--bg-surface-soft)',
-                      border: '1.2px solid var(--border-default)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '240px' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        background: 'var(--bg-inset)',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        color: 'var(--ink-primary)'
-                      }}>
-                        {rule.id || `R${idx + 1}`}
-                      </span>
-
-                      <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--ink-primary)' }}>
-                        {rule.text}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{
-                        fontSize: '10.5px',
-                        fontWeight: 700,
-                        fontFamily: 'var(--font-mono)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        background: 'var(--bg-inset)',
-                        color: 'var(--ink-secondary)'
-                      }}>
-                        {rule.kind}
-                      </span>
-
-                      <span style={{
-                        fontSize: '10.5px',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        background: sevConfig.bg,
-                        color: sevConfig.color,
-                        border: `1px solid ${sevConfig.border}`
-                      }}>
-                        {rule.severity}
-                      </span>
-
-                      <span style={{
-                        fontSize: '10.5px',
-                        fontWeight: 600,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        background: rule.check === 'deterministic' ? '#ECFDF5' : '#F3E8FF',
-                        color: rule.check === 'deterministic' ? '#065F46' : '#6B21A8'
-                      }}>
-                        check: {rule.check}
-                      </span>
-
-                      {rule.applies_to && rule.applies_to.length > 0 && (
-                        <span style={{ fontSize: '11px', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
-                          [{rule.applies_to.join(', ')}]
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRule(idx)}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--ink-muted)',
-                          fontSize: '16px',
-                          cursor: 'pointer',
-                          padding: '4px 8px'
-                        }}
-                        title="Remove rule"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          {cur.required && (
+            <div className={`gt-need${answered ? ' ok' : ''}`}>
+              {answered ? '✓ Done' : cur.id === 'purpose' && purpose.trim().length > 0 ? `Needs ${Math.max(0, 5 - purpose.trim().length)} more characters` : 'Required to run'}
             </div>
           )}
 
-          {/* Add Rule Form */}
-          <div style={{
-            background: 'var(--bg-inset)',
-            border: '1.5px dashed var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '18px 20px'
-          }}>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ink-primary)', textTransform: 'uppercase', marginBottom: '12px' }}>
-              + Add Safety Invariant Rule
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'end' }}>
-              <div style={{ gridColumn: 'span 2', minWidth: '300px' }}>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  Rule Statement (e.g. 'Must confirm before cancelling bookings') *
-                </label>
-                <input
-                  type="text"
-                  value={newRuleText}
-                  onChange={(e) => setNewRuleText(e.target.value)}
-                  placeholder="e.g. Must verify budget limit before creating reservation"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  Type of Rule
-                </label>
-                <select
-                  value={newRuleKind}
-                  onChange={(e) => setNewRuleKind(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px',
-                    background: '#fff'
-                  }}
-                >
-                  {KINDS.map(k => (
-                    <option key={k.id} value={k.id}>{k.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  Severity if Broken
-                </label>
-                <select
-                  value={newRuleSeverity}
-                  onChange={(e) => setNewRuleSeverity(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px',
-                    background: '#fff'
-                  }}
-                >
-                  {SEVERITIES.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  Verification Check Mode
-                </label>
-                <select
-                  value={newRuleCheck}
-                  onChange={(e) => setNewRuleCheck(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px',
-                    background: '#fff'
-                  }}
-                >
-                  <option value="judge">LLM Judge (Semantic reasoning)</option>
-                  <option value="deterministic">Deterministic (From tool calls alone)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  Tool Concerns (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={newRuleAppliesTo}
-                  onChange={(e) => setNewRuleAppliesTo(e.target.value)}
-                  placeholder="e.g. book_hotel, cancel_flight"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px'
-                  }}
-                />
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleAddRule}
-                  style={{
-                    width: '100%',
-                    padding: '9px 16px',
-                    background: 'var(--ink-primary)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 'var(--radius-md)',
-                    fontWeight: 700,
-                    fontSize: '12.5px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  + Add Rule
-                </button>
-              </div>
+          <div className="gt-nav">
+            <button type="button" className="gt-btn-ghost" onClick={() => goTo(step - 1)} disabled={step === 0}>← Back</button>
+            <div className="right">
+              {isReview ? (
+                <>
+                  <button type="button" className="gt-btn-ghost" onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Spec Only'}</button>
+                  <button type="button" className="gt-btn-lime" onClick={handleSaveAndRun}>Run Pipeline &amp; Analyze Agent <span>➔</span></button>
+                </>
+              ) : (
+                <>
+                  {!cur.required && !answered && (
+                    <button type="button" className="gt-btn-text" onClick={() => { goTo(step + 1); flash('Skipped. You can return anytime.'); }}>Skip</button>
+                  )}
+                  <button type="button" className="gt-btn-lime sm" style={{ padding: '11px 26px', fontSize: '13.5px' }} onClick={goNext}>Next →</button>
+                </>
+              )}
             </div>
           </div>
         </div>
-
-        {/* SECTION 3: AMBIGUITY POLICY & SUSPECTED FRAGILITY */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-              SECTION 3
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              7–9. Ambiguity Policy & Fragility Edge Cases
-            </h2>
-          </div>
-
-          {/* Q7: Ambiguity Policy */}
-          <div style={{ marginBottom: '22px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '6px' }}>
-              7. When information is missing or ambiguous, the agent should:
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-              {POLICIES.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => setAmbiguityPolicy(p.id)}
-                  style={{
-                    border: ambiguityPolicy === p.id ? '2px solid var(--accent)' : '1px solid var(--border-default)',
-                    background: ambiguityPolicy === p.id ? 'var(--accent-light)' : 'var(--bg-surface-soft)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '14px 16px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <input
-                      type="radio"
-                      name="ambiguity_policy"
-                      checked={ambiguityPolicy === p.id}
-                      onChange={() => setAmbiguityPolicy(p.id)}
-                      style={{ accentColor: 'var(--accent)' }}
-                    />
-                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: ambiguityPolicy === p.id ? 'var(--accent)' : 'var(--ink-primary)' }}>
-                      {p.label}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: '12px', color: 'var(--ink-muted)', margin: 0, paddingLeft: '22px' }}>
-                    {p.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-            {/* Q8: Weak Spots */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                8. Where do you suspect the agent is fragile or has misbehaved before? (Weak Spots)
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                One per line. Known fragile workflows, loops, or complex tool branches.
-              </p>
-              <textarea
-                rows={3}
-                value={weakSpotsText}
-                onChange={(e) => setWeakSpotsText(e.target.value)}
-                placeholder="e.g.&#10;Looping between hotel booking and budget critic&#10;Date parsing with ambiguous formats like dd/mm vs mm/dd"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-
-            {/* Q9: Problematic User Behaviors */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                9. Which user behaviors cause trouble in practice?
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                One per line (e.g. impatient, vague, changing requirements mid-flight).
-              </p>
-              <textarea
-                rows={3}
-                value={userBehaviorsText}
-                onChange={(e) => setUserBehaviorsText(e.target.value)}
-                placeholder="e.g.&#10;impatient users repeatedly re-asking questions&#10;vague budget without specifying currency&#10;switching destinations midway"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 4: EXTERNAL SERVICES & MOCKING */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-                SECTION 4
-              </span>
-              <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-                10–12. External Services & Mocking Strategies
-              </h2>
-            </div>
-            <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>
-              {services.length} {services.length === 1 ? 'service declared' : 'services declared'}
-            </span>
-          </div>
-
-          <p style={{ fontSize: '12.5px', color: 'var(--ink-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-            Third-party APIs and services the agent touches. Configure which are unsafe to hit during verification and how failure modes should be injected.
-          </p>
-
-          {/* Active Services List */}
-          {services.length === 0 ? (
-            <div style={{ background: 'var(--bg-inset)', padding: '18px', borderRadius: 'var(--radius-md)', textAlign: 'center', color: 'var(--ink-muted)', fontSize: '12.5px', marginBottom: '18px' }}>
-              No external services declared. Add dependent APIs below if your agent connects to external services.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-              {services.map((srv, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'var(--bg-surface-soft)',
-                    border: '1.2px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--ink-primary)', fontFamily: 'var(--font-mono)' }}>
-                      {srv.name}
-                    </span>
-                    {srv.unsafe_to_hit && (
-                      <span style={{
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        background: '#FEE2E2',
-                        color: '#DC2626',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid #FCA5A5'
-                      }}>
-                        UNSAFE TO CALL FOR REAL
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--ink-secondary)', background: 'var(--bg-inset)', padding: '2px 8px', borderRadius: '4px' }}>
-                      Mock: <strong>{srv.mock}</strong>
-                    </span>
-
-                    {srv.failure_modes && srv.failure_modes.length > 0 && (
-                      <span style={{ fontSize: '11px', color: 'var(--ink-muted)' }}>
-                        Failures: {srv.failure_modes.join(', ')}
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveService(idx)}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--ink-muted)',
-                        fontSize: '16px',
-                        cursor: 'pointer',
-                        padding: '4px 8px'
-                      }}
-                      title="Remove service"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add Service Form */}
-          <div style={{
-            background: 'var(--bg-inset)',
-            border: '1.5px dashed var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '18px 20px'
-          }}>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--ink-primary)', textTransform: 'uppercase', marginBottom: '12px' }}>
-              + Add External Dependency
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'end' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  10. Service Name *
-                </label>
-                <input
-                  type="text"
-                  value={newServiceName}
-                  onChange={(e) => setNewServiceName(e.target.value)}
-                  placeholder="e.g. Stripe, Amadeus Flights, Twilio"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  11. Mocking Strategy
-                </label>
-                <select
-                  value={newServiceMock}
-                  onChange={(e) => setNewServiceMock(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px',
-                    background: '#fff'
-                  }}
-                >
-                  {MOCKS.map(m => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--ink-muted)', marginBottom: '4px' }}>
-                  12. Failures to Test (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={newServiceFailures}
-                  onChange={(e) => setNewServiceFailures(e.target.value)}
-                  placeholder="e.g. timeout, rate_limit, 500 error"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', height: '36px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={newServiceUnsafe}
-                    onChange={(e) => setNewServiceUnsafe(e.target.checked)}
-                    style={{ width: '15px', height: '15px', accentColor: '#DC2626' }}
-                  />
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#B91C1C' }}>
-                    Unsafe to call during test
-                  </span>
-                </label>
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleAddService}
-                  style={{
-                    width: '100%',
-                    padding: '9px 16px',
-                    background: 'var(--ink-primary)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 'var(--radius-md)',
-                    fontWeight: 700,
-                    fontSize: '12.5px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  + Add Service
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 5: QUALITY STANDARDS & FAILURE TOLERANCE */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-              SECTION 5
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              13–14. Quality Standards & Verification Thresholds
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-            {/* Q13: Quality Notes */}
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                13. Beyond correctness, what matters in replies?
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Tone, brevity, formatting, or language constraints (empty to skip).
-              </p>
-              <input
-                type="text"
-                value={qualityNotes}
-                onChange={(e) => setQualityNotes(e.target.value)}
-                placeholder="e.g. Concise bullet points, polite tone, zero markdown rendering bugs"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            {/* Q14: Thresholds */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                14. How many critical failures are acceptable?
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Default is 0 (zero tolerance for critical violations).
-              </p>
-              <input
-                type="number"
-                min="0"
-                max="1000"
-                value={maxCriticalFailures}
-                onChange={(e) => setMaxCriticalFailures(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                Minimum Pass Rate (0.0 to 1.0)
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                Overall test threshold from 0 to 1 (empty to skip, e.g. 0.95 for 95%).
-              </p>
-              <input
-                type="number"
-                step="0.05"
-                min="0"
-                max="1"
-                value={minPassRate}
-                onChange={(e) => setMinPassRate(e.target.value)}
-                placeholder="e.g. 0.95"
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '13px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 6: REFERENCE MATERIAL & REPORTING */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-              SECTION 6
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              15–16. Reference Data & Report Configuration
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-            {/* Q15: Reference Material */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                15. Real conversations, logs or bug reports we can learn from?
-              </label>
-              <p style={{ fontSize: '12px', color: 'var(--ink-muted)', marginBottom: '8px' }}>
-                File paths (one per line) to transcripts, telemetry, or historical failure cases.
-              </p>
-              <textarea
-                rows={3}
-                value={referenceMaterialText}
-                onChange={(e) => setReferenceMaterialText(e.target.value)}
-                placeholder="e.g.&#10;logs/prod_interactions.jsonl&#10;tests/fixtures/past_failures.txt"
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-
-            {/* Q16: Report Audience & Emphasis */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                  16. Who will read the report?
-                </label>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                  {AUDIENCES.map(aud => (
-                    <button
-                      type="button"
-                      key={aud.id}
-                      onClick={() => setReportAudience(aud.id)}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: 'var(--radius-md)',
-                        border: reportAudience === aud.id ? '2px solid var(--accent)' : '1px solid var(--border-default)',
-                        background: reportAudience === aud.id ? 'var(--accent-light)' : 'var(--bg-surface-soft)',
-                        color: reportAudience === aud.id ? 'var(--accent)' : 'var(--ink-primary)',
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {aud.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                  Report Emphasis (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={reportEmphasis}
-                  onChange={(e) => setReportEmphasis(e.target.value)}
-                  placeholder="e.g. security, financial accuracy, edge case coverage"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-default)',
-                    fontSize: '12.5px'
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 7: RUNTIME CONFIGURATION */}
-        <div style={{ background: '#fff', border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: 'var(--shadow-card)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 800, background: 'var(--accent)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>
-              SECTION 7
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--ink-primary)', margin: 0 }}>
-              Runtime Execution & Reproducibility Settings
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                Agent Entry File or Command
-              </label>
-              <input
-                type="text"
-                value={entryPoint}
-                onChange={(e) => setEntryPoint(e.target.value)}
-                placeholder="e.g. python main.py or graph:app"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                Interface Architecture
-              </label>
-              <select
-                value={interfaceType}
-                onChange={(e) => setInterfaceType(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  background: '#fff'
-                }}
-              >
-                <option value="python_module">Python Module (Callable graph)</option>
-                <option value="http">HTTP Service (REST / WebSocket endpoint)</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--ink-primary)', marginBottom: '4px' }}>
-                Repeated Runs to Check Reproducibility
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={repeats}
-                onChange={(e) => setRepeats(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-default)',
-                  fontSize: '12.5px',
-                  fontFamily: 'var(--font-mono)'
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Floating Save / Action Bar */}
-        <div style={{
-          position: 'sticky',
-          bottom: '24px',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(16px)',
-          border: '1.5px solid var(--border-default)',
-          borderRadius: 'var(--radius-full)',
-          padding: '12px 24px',
-          boxShadow: 'var(--shadow-float)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          zIndex: 40
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>Configured:</span>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink-primary)' }}>
-              {rules.length} rules · {services.length} services · policy: {ambiguityPolicy}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {onBack && (
-              <button
-                type="button"
-                onClick={onBack}
-                style={{
-                  border: '1.5px solid var(--border-default)',
-                  background: '#fff',
-                  color: 'var(--ink-secondary)',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  padding: '9px 18px',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: 'pointer'
-                }}
-              >
-                Back
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              style={{
-                border: '1.5px solid var(--border-default)',
-                background: '#fff',
-                color: 'var(--ink-primary)',
-                fontWeight: 700,
-                fontSize: '13px',
-                padding: '9px 20px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer'
-              }}
-            >
-              {isSaving ? 'Saving...' : 'Save Spec Only'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSaveAndRun}
-              style={{
-                border: 'none',
-                background: 'linear-gradient(135deg, var(--accent) 0%, #EA580C 100%)',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: '13px',
-                padding: '10px 24px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(224, 93, 56, 0.35)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <span>Run Pipeline & Analyze Agent</span>
-              <span>➔</span>
-            </button>
-          </div>
-        </div>
-
       </div>
-
     </div>
   );
 }

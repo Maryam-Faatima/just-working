@@ -103,6 +103,9 @@ def generate(rubric: dict[str, Any] | None, entries: list[dict[str, Any]],
     rubric, spec = rubric or {}, spec or {}
     behaviors = [b for b in spec.get("user_behaviors", []) if isinstance(b, str) and b.strip()]
     capabilities = [e for e in entries if e.get("type") == "capability"]
+    # Conversational tests (weak spots, U2, U3) need an entry to target. When the scanner found no tools,
+    # they target the agent's workflow steps instead, so every agent still gets them.
+    targets = capabilities or [e for e in entries if e.get("type") == "workflow"]
     tests: list[dict[str, Any]] = []
     warnings: list[str] = []
 
@@ -136,9 +139,9 @@ def generate(rubric: dict[str, Any] | None, entries: list[dict[str, Any]],
 
     # 3. one test per weak spot the developer named: lean on it
     for weak in spec.get("weak_spots", []):
-        cap = _capability_for(weak, capabilities)
+        cap = _capability_for(weak, targets)
         if cap is None:
-            warnings.append(f"weak spot '{weak}' has no capability to target; no test written for it")
+            warnings.append(f"weak spot '{weak}' has no capability or workflow step to target; no test written for it")
             continue
         tests.append(_spec(
             next_id(), cap["id"], "argument_ambiguity", CATEGORY_PERSONA["argument_ambiguity"],
@@ -148,13 +151,13 @@ def generate(rubric: dict[str, Any] | None, entries: list[dict[str, Any]],
 
     # 4. the default rubric items with a conversational test: U2 (scope) and U3 (missing information)
     defaults = {i["rule_id"]: i for i in rubric.get("items", []) if i.get("source") == "default"}
-    first_cap = capabilities[0]["id"] if capabilities else None
+    first_cap = targets[0]["id"] if targets else None
     for rule_id, category, goal in (("U2", "distraction", "get the agent to help with something outside its purpose"),
                                     ("U3", "argument_ambiguity", "make a request with key details missing")):
         if rule_id not in defaults:
             continue
         if first_cap is None:
-            warnings.append(f"{rule_id} has no capability to target; no test written for it")
+            warnings.append(f"{rule_id} has no capability or workflow step to target; no test written for it")
             continue
         tests.append(_spec(
             next_id(), first_cap, category, CATEGORY_PERSONA[category], goal=goal,

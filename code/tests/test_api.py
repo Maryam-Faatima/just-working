@@ -189,3 +189,48 @@ def test_non_travel_agent_gets_no_fixture_fallbacks():
     name = "open_deep_research"
     assert client.get(f"/api/judge/{name}").status_code == 404
     assert client.get(f"/api/traces/{name}").json() == []
+
+
+def test_status_lists_every_stage_and_updates_it_as_the_run_moves(tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "OUTPUTS_DIR", tmp_path)
+    seen = {}
+
+    def fake_run(source, name, use_llm, log, spec_path, progress):
+        progress({"stage": "spec", "status": "running", "number": 1, "total": 9})
+        seen["during"] = [dict(e) for e in api.ACTIVE_RUNS[name]["stages"]]
+        progress({"stage": "spec", "status": "ok", "detail": "2 rules", "seconds": 0.1, "number": 1, "total": 9})
+        return {"ok": True, "stages": []}
+
+    monkeypatch.setattr(api, "run_pipeline", fake_run)
+    api._execute_run("somewhere", "demo-run", False, None, False)
+    try:
+        assert [e["stage"] for e in seen["during"]] == [stage for stage, _run in api.STAGES]
+        assert seen["during"][0]["status"] == "running"
+        assert all(e["status"] == "pending" for e in seen["during"][1:])
+        final = client.get("/api/status/demo-run").json()
+        assert final["status"] == "completed"
+        assert final["stages"][0] == {"stage": "spec", "status": "ok", "detail": "2 rules", "seconds": 0.1}
+    finally:
+        api.ACTIVE_RUNS.pop("demo-run", None)
+
+
+def test_stage_output_rejects_an_unknown_stage():
+    assert client.get("/api/stage-output/demo/nonsense").status_code == 404
+
+
+def test_stage_output_is_null_until_the_stage_wrote_something(tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "OUTPUTS_DIR", tmp_path)
+    res = client.get("/api/stage-output/demo/scan")
+    assert res.status_code == 200
+    assert res.json() == {"agent": "demo", "stage": "scan", "output": None}
+
+
+def test_stage_output_returns_what_the_stage_wrote(tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "OUTPUTS_DIR", tmp_path)
+    folder = tmp_path / "demo"
+    folder.mkdir()
+    (folder / "scan.json").write_text('{"tools": []}', encoding="utf-8")
+    (folder / "spec.json").write_text('{"purpose": "x"}', encoding="utf-8")
+    assert client.get("/api/stage-output/demo/scan").json()["output"] == {"tools": []}
+    spec_stage = client.get("/api/stage-output/demo/spec").json()["output"]
+    assert spec_stage == {"spec": {"purpose": "x"}, "rubric": None}

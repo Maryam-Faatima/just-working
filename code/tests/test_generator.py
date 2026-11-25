@@ -146,3 +146,14 @@ def test_weak_spot_matching_ignores_plural_and_punctuation():
     tests, _ = generate({"items": []}, caps, {"weak_spots": ["very small budgets"]})
     weak = next(t for t in tests if t.get("target_constraint") == "very small budgets")
     assert weak["target_id"] == "cap_003"
+
+
+def test_without_tools_conversational_tests_target_a_workflow_step():
+    """An agent whose tools the scanner missed still gets its weak-spot, U2 and U3 tests."""
+    entries = [{"id": "wf_001", "type": "workflow", "name": "call_model", "description": "Workflow step call_model"},
+               {"id": "wf_002", "type": "workflow", "name": "tools", "description": "Workflow step tools"}]
+    rubric = {"items": [{"rule_id": "U2", "source": "default", "description": "stay in scope"},
+                        {"rule_id": "U3", "source": "default", "description": "ask when unsure"}]}
+    tests, warnings = generate(rubric, entries, {"weak_spots": ["vague questions"]})
+    assert [t["category"] for t in tests] == ["argument_ambiguity", "distraction", "argument_ambiguity"]
+    assert {t["target_id"] for t in tests} <= {"wf_001", "wf_002"} and warnings == []
