@@ -47,7 +47,9 @@ The order follows slide 6: Phase 0 first, then Phase 1 (scan, call graph, model,
 | 4 | model | Builds the rule-based model, adds the developer's rules, writes the rubric | model_v0_rule.json, model_v0.json, rubric.json, spec.json (with a spec) |
 | 5 | infer | Asks the LLM to cross-check V0 and add constraints | model_v0.json (updated) |
 | 6 | test | Optional hook: testing.runner.run(ctx) | defined by the testing lane |
-| 7 | report | Optional hook: evidence.report.build(ctx) | defined by the evidence lane |
+| 7 | check | Optional hook: testing.campaign.run(ctx). Marks every run with the checks and updates the model entries (decisions 63 to 66) | findings.json, model_changes.json, model_v1.json |
+| 8 | judge | Optional hook: testing.judge_all.run(ctx). Scores every completed trace with the LLM judge beside the checks, see docs/judge.md | judge_all.json |
+| 9 | report | Optional hook: evidence.report.build(ctx) | evidence_graph.json, report.md |
 
 Every run also writes run_summary.json: per stage the status, a detail line and the time taken,
 plus the spec path and the spec warnings.

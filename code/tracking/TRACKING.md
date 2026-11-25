@@ -1,6 +1,6 @@
 # TRACKING.md: GreatTest FYP-1 Final
 
-Last updated: 21 Nov 2026. Update this file in every PR that finishes or moves a task.
+Last updated: 25 Nov 2026. Update this file in every PR that finishes or moves a task.
 Key dates: poster due 20 Nov (week 13), FYP-1 Final about 4 Dec (week 15).
 Status key: DONE (merged, tests pass), BUILT (code exists in repo, tick not confirmed), TODO, LATE (past target date).
 Last verified: ruff clean, 405 passed, 2 skipped on develop. CD workflow and the checks CLI were not verified.
@@ -34,14 +34,14 @@ Last verified: ruff clean, 405 passed, 2 skipped on develop. CD workflow and the
 ## Aliza (AY)
 | ID | Task | Target | Status | Notes |
 |---|---|---|---|---|
-| AY-1 | LLM judge (testing/judge.py) | 14 Nov | LATE | File does not exist yet. Scores 1 to 5, below 3 fail, 3 weak, cached, safe if LLM down |
-| AY-2 | Judge contract extension (change-control PR) | 9 Nov | LATE | Needs MF and AY approval |
-| AY-3 | Real findings in evidence graph | 17 Nov | TODO | Needs runner and judge output |
-| AY-4 | Report on real runs | 18 Nov | TODO | |
-| AY-5 | UI on real runs, remove SIMULATION label | 19 Nov | TODO | |
-| AY-6 | Conference poster, 22.5 x 34.5 in portrait, source + JPEG | 20 Nov | DUE TODAY | Needs supervisor approval |
-| AY-7 | Judge reliability study | 25 Nov | TODO | |
-| AY-8 | FYP-2 evaluation plan | 26 Nov | TODO | |
+| AY-1 | LLM judge (testing/judge.py) | 14 Nov | DONE | Merged. Decisions 61 and 62 cover what it skips and the order of checks and judge. See docs/judge.md |
+| AY-2 | Judge contract extension (change-control PR) | 9 Nov | DONE | Approved by AY and MF |
+| AY-3 | Real findings in evidence graph | 17 Nov | DONE | Finding to trace to test to model entry to code, real run on target_agent |
+| AY-4 | Report on real runs | 18 Nov | DONE | Coverage, severity, reproducibility, model changes, evidence chains, a judge score for every run |
+| AY-5 | UI on real runs, remove SIMULATION label | 19 Nov | DONE | PDF shows all report sections |
+| AY-6 | Conference poster, 22.5 x 34.5 in portrait, source + JPEG | 20 Nov | DONE | |
+| AY-7 | Judge reliability study | 25 Nov | BUILT | Judge stage, consistency check, blind audit and metrics exist (decisions 77 to 79, docs/judge.md). Open: human labels, positive control, consistency re-run after the quota outage, write-up |
+| AY-8 | FYP-2 evaluation plan | 26 Nov | BUILT | Draft written. Fill in the AY-7 numbers, then add to the report |
 | AY-9 | Requirements and scope chapters | 27 Nov | TODO | |
 
 ## Shared
@@ -60,7 +60,7 @@ Last verified: ruff clean, 405 passed, 2 skipped on develop. CD workflow and the
 1. Checklist file is behind the code. Tick MF-1, EH-1, decision 53 after confirming.
 2. .llm_cache/ is now in .gitignore (decision 67). The 77 cached files are removed from the git index (21 Nov, staged, commit pending); your local copies are kept.
 3. Most Iteration 2 dates have slipped. Per the handbook, record delays with new owners and dates in the milestone log (SH-4).
-4. judge.py and the universal adapter block the live flip demo and findings in the report. Use fixtures until they land.
+4. Only AY-9 is not started: it needs the report's requirements chapters.
 5. Report fixes outstanding: Table C.2 format, target-agent test count (93 vs 95), per-member AI entries, screenshots, contribution table vs commit history. FYP-1 Final report must match the demo.
 
 ## Cut line (drop in this order)

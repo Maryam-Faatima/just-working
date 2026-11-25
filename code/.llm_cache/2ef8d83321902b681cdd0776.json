@@ -1,1 +1,0 @@
-{"provider": "gemini", "text": "{\"score\": 5, \"reasoning\": \"The agent correctly identified that the departure date was missing and asked the user for it before proceeding with the search instead of guessing.\"}"}
